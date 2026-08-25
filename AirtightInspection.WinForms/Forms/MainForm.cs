@@ -22,8 +22,8 @@ namespace AirtightInspection.Forms
         private readonly AppConfig _config; private readonly Database _database;
         private readonly PendingRecordService _pending; private readonly ModbusService _modbus;
         private readonly ScannerService _scanner; private readonly InspectionService _inspection;
-        private readonly ComboBox _products; private readonly DataGridView _records, _pendingGrid;
-        private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _productStatus, _focusHint, _pendingStatus, _clockStatus;
+        private readonly ComboBox _products; private readonly IndustrialCard _productCard; private readonly DataGridView _records, _pendingGrid;
+        private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _focusHint, _pendingStatus, _clockStatus;
         private readonly StringBuilder _keyboardBuffer = new StringBuilder();
         private readonly Timer _keyboardFinalizeTimer;
         private List<StationConfig> _enabledStations = new List<StationConfig>();
@@ -91,21 +91,21 @@ namespace AirtightInspection.Forms
             for (var i = 0; i < 4; i++) statusGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
             _plcStatus = StatusValue("离线", IndustrialTheme.Danger);
             _stationStatus = StatusValue("--", IndustrialTheme.Text);
-            _productStatus = StatusValue("未选择", IndustrialTheme.Text);
             _pendingStatus = StatusValue("00", IndustrialTheme.Text);
-            statusGrid.Controls.Add(StatusCard("控制器连接状态", _plcStatus, IndustrialTheme.Danger), 0, 0);
+            _products = new ComboBox { Height = 38, DropDownStyle = ComboBoxStyle.DropDownList, Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold) };
+            _productCard = ProductCard(_products);
+            statusGrid.Controls.Add(_productCard, 0, 0);
             statusGrid.Controls.Add(StatusCard("PLC当前的工位号", _stationStatus, IndustrialTheme.Accent), 1, 0);
-            statusGrid.Controls.Add(StatusCard("当前产品名称", _productStatus, IndustrialTheme.Warning), 2, 0);
+            statusGrid.Controls.Add(StatusCard("控制器连接状态", _plcStatus, IndustrialTheme.Danger), 2, 0);
             statusGrid.Controls.Add(StatusCard("待检测记录数量", _pendingStatus, IndustrialTheme.Success), 3, 0);
             statusGrid.MouseDown += drag;
 
-            // 产品与窗口命令区
+            // 扫码提示与窗口命令区
             var productBar = new Panel { Dock = DockStyle.Fill, BackColor = IndustrialTheme.Panel, Padding = new Padding(10, 7, 8, 6) };
             var productCommands = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, BackColor = IndustrialTheme.Panel, Padding = new Padding(2, 1, 0, 0) };
-            var productCaption = UiFactory.Label("切换生产产品"); productCaption.ForeColor = IndustrialTheme.Accent; productCaption.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
-            _products = new ComboBox { Width = 420, Height = 38, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(12, 0, 18, 0), Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold) };
             _focusHint = UiFactory.Label(_scanner.IsKeyboardMode ? "● 请点击本窗口后扫码" : "● 串口扫码枪已启用"); _focusHint.ForeColor = IndustrialTheme.Warning;
-            productCommands.Controls.AddRange(new Control[] { productCaption, _products, _focusHint });
+            _focusHint.Margin = new Padding(4, 7, 0, 0);
+            productCommands.Controls.Add(_focusHint);
             var windowButtons = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 100, Padding = new Padding(0, 2, 0, 0), FlowDirection = FlowDirection.LeftToRight, BackColor = IndustrialTheme.Panel };
             var minimizeButton = new Button { Text = "—", Width = 42, Height = 32, Margin = new Padding(2) };
             var closeButton = new Button { Text = "×", Width = 42, Height = 32, Margin = new Padding(2) };
@@ -136,7 +136,7 @@ namespace AirtightInspection.Forms
 
             IndustrialTheme.Apply(this);
             IndustrialTheme.StyleButton(closeButton, true);
-            brandTitle.ForeColor = IndustrialTheme.Accent; productCaption.ForeColor = IndustrialTheme.Accent; _focusHint.ForeColor = IndustrialTheme.Warning;
+            brandTitle.ForeColor = IndustrialTheme.Accent; _focusHint.ForeColor = IndustrialTheme.Warning;
             _plcStatus.ForeColor = IndustrialTheme.Danger;
 
             _pending.Changed += (_, __) => SafeUi(RefreshPending);
@@ -174,6 +174,27 @@ namespace AirtightInspection.Forms
             var title = new Label { Text = caption, Dock = DockStyle.Top, Height = 24, ForeColor = IndustrialTheme.Muted,
                 Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
             card.Controls.Add(value); card.Controls.Add(title); return card;
+        }
+
+        private static IndustrialCard ProductCard(ComboBox products)
+        {
+            var card = new IndustrialCard { Dock = DockStyle.Fill, AccentColor = IndustrialTheme.Warning };
+            var title = new Label
+            {
+                Text = "当前产品名称  /  点击切换",
+                Dock = DockStyle.Top,
+                Height = 24,
+                ForeColor = IndustrialTheme.Muted,
+                Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            var selectorHost = new Panel { Dock = DockStyle.Fill, BackColor = IndustrialTheme.Panel, Padding = new Padding(0, 2, 0, 0) };
+            products.Dock = DockStyle.Top;
+            products.Margin = Padding.Empty;
+            selectorHost.Controls.Add(products);
+            card.Controls.Add(selectorHost);
+            card.Controls.Add(title);
+            return card;
         }
 
         private static Control WrapWithTitle(string title, Control content)
@@ -365,10 +386,9 @@ namespace AirtightInspection.Forms
         private void UpdateProductStatus()
         {
             var product = _products.SelectedItem as ProductConfig;
-            _productStatus.Text = product?.ProductName ?? "未选择";
-            _productStatus.ForeColor = product == null ? IndustrialTheme.Danger : IndustrialTheme.Warning;
-            var card = _productStatus.Parent as IndustrialCard;
-            if (card != null) { card.AccentColor = _productStatus.ForeColor; card.Invalidate(); }
+            _productCard.AccentColor = product == null ? IndustrialTheme.Danger : IndustrialTheme.Warning;
+            _products.ForeColor = product == null ? IndustrialTheme.Danger : IndustrialTheme.Text;
+            _productCard.Invalidate();
         }
         private void RefreshStations() => _enabledStations = _database.GetStations(true);
 
