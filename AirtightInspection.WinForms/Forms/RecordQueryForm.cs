@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Globalization;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AirtightInspection.Data;
@@ -16,14 +15,14 @@ namespace AirtightInspection.Forms
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly Database _database;
-        private readonly TextBox _startDate;
-        private readonly TextBox _endDate;
-        private readonly ComboBox _station;
-        private readonly ComboBox _product;
-        private readonly TextBox _barcode;
-        private readonly DataGridView _grid;
-        private readonly Label _countLabel;
-        private readonly Button _queryButton;
+        private readonly UIDatePicker _startDate;
+        private readonly UIDatePicker _endDate;
+        private readonly UIComboBox _station;
+        private readonly UIComboBox _product;
+        private readonly UITextBox _barcode;
+        private readonly UIDataGridView _grid;
+        private readonly UILabel _countLabel;
+        private readonly UIButton _queryButton;
         private List<ScanRecord> _results = new List<ScanRecord>();
 
         public RecordQueryForm(Database database)
@@ -37,41 +36,45 @@ namespace AirtightInspection.Forms
             WindowState = FormWindowState.Maximized;
             FormBorderStyle = FormBorderStyle.None;
 
-            var toolbar = new FlowLayoutPanel
+            var toolbar = new UIFlowLayoutPanel
             {
                 Dock = DockStyle.Top,
                 Height = 52,
                 Padding = new Padding(8),
                 WrapContents = false,
-                BackColor = IndustrialTheme.Panel
+                FillColor = IndustrialTheme.Panel,
+                RectColor = IndustrialTheme.Panel,
+                StyleCustomMode = true
             };
-            var heading = UiFactory.Label("◆ 检测记录查询");
+            var heading = new UILabel { Text = "◆ 检测记录查询", AutoSize = true, Margin = new Padding(4, 9, 4, 4) };
             heading.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
             heading.ForeColor = IndustrialTheme.Accent;
-            _queryButton = UiFactory.Button("查询", Query);
+            _queryButton = SunnyButton("查询", Query);
             toolbar.Controls.Add(heading);
             toolbar.Controls.Add(_queryButton);
-            toolbar.Controls.Add(UiFactory.Button("重置条件", (_, __) => ResetFilters(true)));
-            toolbar.Controls.Add(UiFactory.Button("导出查询结果", ExportResults));
-            toolbar.Controls.Add(UiFactory.Button("关闭", (_, __) => Close()));
-            _countLabel = UiFactory.Label("查询结果：0 条");
+            toolbar.Controls.Add(SunnyButton("重置条件", (_, __) => ResetFilters(true)));
+            toolbar.Controls.Add(SunnyButton("导出查询结果", ExportResults, 116));
+            toolbar.Controls.Add(SunnyButton("关闭", (_, __) => Close()));
+            _countLabel = new UILabel { Text = "查询结果：0 条", AutoSize = true };
             _countLabel.ForeColor = IndustrialTheme.Muted;
             _countLabel.Margin = new Padding(18, 9, 4, 4);
             toolbar.Controls.Add(_countLabel);
 
-            var filters = new FlowLayoutPanel
+            var filters = new UIFlowLayoutPanel
             {
                 Dock = DockStyle.Top,
                 Height = 76,
                 Padding = new Padding(12, 13, 12, 8),
                 WrapContents = false,
-                BackColor = IndustrialTheme.Surface
+                FillColor = IndustrialTheme.Surface,
+                RectColor = IndustrialTheme.Surface,
+                StyleCustomMode = true
             };
             _startDate = DateInput(DateTime.Today.AddDays(-7));
             _endDate = DateInput(DateTime.Today);
-            _station = new ComboBox { Width = 150, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(5, 4, 14, 0) };
-            _product = new ComboBox { Width = 190, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(5, 4, 14, 0) };
-            _barcode = new TextBox { Width = 230, Margin = new Padding(5, 4, 10, 0), MaxLength = 200 };
+            _station = new UIComboBox { Width = 150, Height = 32, DropDownStyle = UIDropDownStyle.DropDownList, Margin = new Padding(5, 4, 14, 0) };
+            _product = new UIComboBox { Width = 190, Height = 32, DropDownStyle = UIDropDownStyle.DropDownList, Margin = new Padding(5, 4, 14, 0) };
+            _barcode = new UITextBox { Width = 230, Height = 32, Margin = new Padding(5, 4, 10, 0), MaxLength = 200, Watermark = "输入条码关键字" };
             filters.Controls.AddRange(new Control[]
             {
                 FilterLabel("开始日期"), _startDate,
@@ -83,7 +86,7 @@ namespace AirtightInspection.Forms
 
             _grid = CreateGrid();
             _grid.CellDoubleClick += (_, e) => ShowDetail(e.RowIndex);
-            var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10), BackColor = IndustrialTheme.Background };
+            var content = new UIPanel { Dock = DockStyle.Fill, Padding = new Padding(10), FillColor = IndustrialTheme.Background, RectColor = IndustrialTheme.Background, StyleCustomMode = true };
             content.Controls.Add(_grid);
 
             Controls.Add(content);
@@ -99,16 +102,16 @@ namespace AirtightInspection.Forms
             };
         }
 
-        private static TextBox DateInput(DateTime value) => new TextBox
+        private static UIDatePicker DateInput(DateTime value) => new UIDatePicker
         {
-            Text = value.ToString("yyyy-MM-dd"),
+            Value = value,
+            DateFormat = "yyyy-MM-dd",
             Width = 130,
-            MaxLength = 10,
-            TextAlign = HorizontalAlignment.Center,
+            Height = 32,
             Margin = new Padding(5, 4, 14, 0)
         };
 
-        private static Label FilterLabel(string text) => new Label
+        private static UILabel FilterLabel(string text) => new UILabel
         {
             Text = text,
             AutoSize = true,
@@ -117,9 +120,9 @@ namespace AirtightInspection.Forms
             Margin = new Padding(5, 8, 0, 0)
         };
 
-        private static DataGridView CreateGrid()
+        private static UIDataGridView CreateGrid()
         {
-            var grid = new DataGridView
+            var grid = new UIDataGridView
             {
                 Dock = DockStyle.Fill,
                 ReadOnly = true,
@@ -139,6 +142,14 @@ namespace AirtightInspection.Forms
             return grid;
         }
 
+        private static UIButton SunnyButton(string text, EventHandler click, int width = 88)
+        {
+            var button = new UIButton { Text = text, Width = width, Height = 34, Margin = new Padding(4), Radius = 0 };
+            button.Click += click;
+            IndustrialTheme.StyleSunnyButton(button);
+            return button;
+        }
+
         private void LoadFilters()
         {
             _station.Items.Clear();
@@ -154,14 +165,8 @@ namespace AirtightInspection.Forms
 
         private async void Query(object sender, EventArgs e)
         {
-            DateTime start;
-            DateTime end;
-            if (!DateTime.TryParseExact(_startDate.Text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out start) ||
-                !DateTime.TryParseExact(_endDate.Text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out end))
-            {
-                IndustrialMessageBox.Show(this, "日期格式必须为 yyyy-MM-dd，例如 2026-08-25。", "查询条件错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+            var start = _startDate.Value.Date;
+            var end = _endDate.Value.Date;
             if (start > end)
             {
                 IndustrialMessageBox.Show(this, "开始日期不能晚于结束日期。", "查询条件错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -191,11 +196,11 @@ namespace AirtightInspection.Forms
 
         private void ResetFilters(bool query)
         {
-            _startDate.Text = DateTime.Today.AddDays(-7).ToString("yyyy-MM-dd");
-            _endDate.Text = DateTime.Today.ToString("yyyy-MM-dd");
+            _startDate.Value = DateTime.Today.AddDays(-7);
+            _endDate.Value = DateTime.Today;
             if (_station.Items.Count > 0) _station.SelectedIndex = 0;
             if (_product.Items.Count > 0) _product.SelectedIndex = 0;
-            _barcode.Clear();
+            _barcode.Text = string.Empty;
             if (query) Query(this, EventArgs.Empty);
         }
 

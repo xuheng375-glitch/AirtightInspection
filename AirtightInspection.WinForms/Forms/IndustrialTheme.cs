@@ -130,11 +130,42 @@ namespace AirtightInspection.Forms
             button.Cursor = Cursors.Hand;
         }
 
+        public static void StyleSunnyButton(UIButton button, bool danger = false)
+        {
+            button.StyleCustomMode = true;
+            button.FillColor = Surface;
+            button.FillHoverColor = danger ? Color.FromArgb(124, 44, 45) : Color.FromArgb(23, 77, 90);
+            button.FillPressColor = danger ? Color.FromArgb(91, 34, 35) : AccentDark;
+            button.FillDisableColor = Color.FromArgb(30, 40, 47);
+            button.RectColor = danger ? Danger : AccentDark;
+            button.RectHoverColor = danger ? Danger : Accent;
+            button.RectPressColor = danger ? Color.FromArgb(190, 55, 55) : Accent;
+            button.RectDisableColor = Color.FromArgb(56, 68, 75);
+            button.ForeColor = danger ? Color.FromArgb(255, 190, 190) : Text;
+            button.ForeHoverColor = Color.White;
+            button.ForePressColor = Color.White;
+            button.ForeDisableColor = Muted;
+            button.Radius = 0;
+            button.Cursor = Cursors.Hand;
+        }
+
         private static void ApplyControl(Control parent)
         {
             foreach (Control control in parent.Controls)
             {
-                if (control is Button) StyleButton((Button)control);
+                if (control is UIButton sunnyButton) StyleSunnyButton(sunnyButton);
+                else if (control is UIDatePicker datePicker) StyleSunnyInput(datePicker);
+                else if (control is UIComboBox sunnyCombo) StyleSunnyComboBox(sunnyCombo);
+                else if (control is UITextBox sunnyTextBox) StyleSunnyInput(sunnyTextBox);
+                else if (control is UIPanel sunnyPanel)
+                {
+                    sunnyPanel.StyleCustomMode = true;
+                    if (sunnyPanel.FillColor == Color.White || sunnyPanel.FillColor == SystemColors.Control)
+                        sunnyPanel.FillColor = Panel;
+                    sunnyPanel.RectColor = sunnyPanel.FillColor;
+                    sunnyPanel.Radius = 0;
+                }
+                else if (control is Button) StyleButton((Button)control);
                 else if (control is DataGridView) ApplyGrid((DataGridView)control);
                 else if (control is TextBoxBase)
                 {
@@ -186,8 +217,61 @@ namespace AirtightInspection.Forms
                     if (control.BackColor == SystemColors.Control)
                         control.BackColor = Panel;
                 }
-                if (control.HasChildren) ApplyControl(control);
+                if (control.HasChildren && control is not UITextBox && control is not UIComboBox && control is not UIDatePicker)
+                    ApplyControl(control);
             }
+        }
+
+        private static void StyleSunnyInput(UITextBox input)
+        {
+            input.StyleCustomMode = true;
+            input.FillColor = Color.FromArgb(9, 16, 22);
+            input.FillDisableColor = Color.FromArgb(20, 29, 36);
+            input.FillReadOnlyColor = Color.FromArgb(15, 24, 31);
+            input.ForeColor = Text;
+            input.ForeDisableColor = Muted;
+            input.ForeReadOnlyColor = Text;
+            input.RectColor = Color.FromArgb(73, 94, 105);
+            input.RectDisableColor = Color.FromArgb(50, 64, 72);
+            input.RectReadOnlyColor = Color.FromArgb(56, 73, 82);
+            input.WatermarkColor = Muted;
+            input.WatermarkActiveColor = Muted;
+            input.Radius = 0;
+        }
+
+        private static void StyleSunnyInput(UIDatePicker input)
+        {
+            input.StyleCustomMode = true;
+            input.FillColor = Color.FromArgb(9, 16, 22);
+            input.FillDisableColor = Color.FromArgb(20, 29, 36);
+            input.ForeColor = Text;
+            input.ForeDisableColor = Muted;
+            input.RectColor = Color.FromArgb(73, 94, 105);
+            input.RectDisableColor = Color.FromArgb(50, 64, 72);
+            input.WatermarkColor = Muted;
+            input.WatermarkActiveColor = Muted;
+            input.Radius = 0;
+        }
+
+        private static void StyleSunnyComboBox(UIComboBox combo)
+        {
+            combo.StyleCustomMode = true;
+            combo.FillColor = Color.FromArgb(9, 16, 22);
+            combo.FillDisableColor = Color.FromArgb(20, 29, 36);
+            combo.ForeColor = Text;
+            combo.ForeDisableColor = Muted;
+            combo.RectColor = Color.FromArgb(73, 94, 105);
+            combo.RectDisableColor = Color.FromArgb(50, 64, 72);
+            combo.ItemFillColor = Color.FromArgb(9, 16, 22);
+            combo.ItemForeColor = Text;
+            combo.ItemHoverColor = Surface;
+            combo.ItemSelectBackColor = AccentDark;
+            combo.ItemSelectForeColor = Color.White;
+            combo.ItemRectColor = Color.FromArgb(46, 62, 73);
+            combo.WatermarkColor = Muted;
+            combo.WatermarkActiveColor = Muted;
+            combo.Radius = 0;
+            combo.ItemHeight = Math.Max(28, combo.Font.Height + 10);
         }
 
         private static void StyleComboBox(ComboBox combo)
