@@ -191,12 +191,25 @@ FROM ScanRecord ORDER BY Id DESC";
         {
             var directory = Path.GetDirectoryName(backupPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-            using (var source = Open())
-            using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = backupPath }.ToString()))
+            var temporaryPath = backupPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
             {
-                destination.Open();
-                source.BackupDatabase(destination);
+                using (var source = Open())
+                using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = temporaryPath, Pooling = false }.ToString()))
+                {
+                    destination.Open();
+                    source.BackupDatabase(destination);
+                    using (var command = destination.CreateCommand())
+                    {
+                        command.CommandText = "PRAGMA integrity_check;";
+                        var result = Convert.ToString(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+                        if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidDataException("数据库备份完整性检查失败：" + result);
+                    }
+                }
+                File.Move(temporaryPath, backupPath, false);
             }
+            finally { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); }
         }
 
         public List<ScanRecord> QueryRecords(DateTime startTime, DateTime endTimeExclusive,

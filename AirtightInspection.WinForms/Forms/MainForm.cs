@@ -23,11 +23,12 @@ namespace AirtightInspection.Forms
         private readonly PendingRecordService _pending; private readonly ModbusService _modbus;
         private readonly ScannerService _scanner; private readonly InspectionService _inspection; private readonly DatabaseMaintenanceService _maintenance;
         private readonly ComboBox _products; private readonly IndustrialCard _productCard; private readonly DataGridView _records, _pendingGrid;
-        private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _focusHint, _pendingStatus, _clockStatus;
+        private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _focusHint, _pendingStatus, _clockStatus, _dateStatus;
         private readonly StringBuilder _keyboardBuffer = new StringBuilder();
         private readonly Timer _keyboardFinalizeTimer;
         private List<StationConfig> _enabledStations = new List<StationConfig>();
         private DateTime _lastKeyTime;
+        private bool _keyboardOverflow;
 
         [DllImport("user32.dll")] private static extern bool ReleaseCapture();
         [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
@@ -45,7 +46,8 @@ namespace AirtightInspection.Forms
             _keyboardFinalizeTimer.Tick += (_, __) =>
             {
                 _keyboardFinalizeTimer.Stop();
-                if (_keyboardBuffer.Length >= 6) CompleteKeyboardBarcode();
+                if (_keyboardBuffer.Length >= _config.MinimumBarcodeLength || _keyboardOverflow) CompleteKeyboardBarcode();
+                else { _keyboardBuffer.Clear(); SetScanHint("● 已忽略过短的扫码输入", IndustrialTheme.Warning); }
             };
             Text = "气密检测数据采集系统"; Width = 1380; Height = 850; StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.None; KeyPreview = true; MinimumSize = new Size(1100, 700); WindowState = FormWindowState.Maximized;
@@ -83,9 +85,9 @@ namespace AirtightInspection.Forms
 
             var sidebarFooter = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(14, 23, 30) };
             _clockStatus = new Label { Text = "--:--:--", Dock = DockStyle.Top, Height = 34, ForeColor = IndustrialTheme.Text, Font = new Font("Consolas", 16F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
-            var dateLabel = new Label { Text = DateTime.Now.ToString("yyyy-MM-dd"), Dock = DockStyle.Top, Height = 24, ForeColor = IndustrialTheme.Muted, Font = new Font("Consolas", 9F), TextAlign = ContentAlignment.MiddleLeft };
+            _dateStatus = new Label { Text = DateTime.Now.ToString("yyyy-MM-dd"), Dock = DockStyle.Top, Height = 24, ForeColor = IndustrialTheme.Muted, Font = new Font("Consolas", 9F), TextAlign = ContentAlignment.MiddleLeft };
             var versionLabel = new Label { Text = "本地采集节点  ·  版本 1.0", Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.FromArgb(80, 109, 122), Font = new Font("Microsoft YaHei UI", 8F) };
-            sidebarFooter.Controls.Add(versionLabel); sidebarFooter.Controls.Add(dateLabel); sidebarFooter.Controls.Add(_clockStatus); sidebar.Controls.Add(sidebarFooter, 0, 2);
+            sidebarFooter.Controls.Add(versionLabel); sidebarFooter.Controls.Add(_dateStatus); sidebarFooter.Controls.Add(_clockStatus); sidebar.Controls.Add(sidebarFooter, 0, 2);
 
             // 顶部设备状态卡
             var statusGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, BackColor = IndustrialTheme.Background, Padding = new Padding(2) };
@@ -236,7 +238,7 @@ namespace AirtightInspection.Forms
         {
             SwitchToEnglishInputLanguage();
             RefreshProducts(); RefreshStations(); RefreshRecords(); RefreshPending(); _scanner.Start(); _modbus.Start(); _maintenance.Start();
-            var timer = new Timer { Interval = 1000 }; timer.Tick += (_, __) => { _clockStatus.Text = DateTime.Now.ToString("HH:mm:ss"); CheckTimeouts(); }; timer.Start(); Tag = timer;
+            var timer = new Timer { Interval = 1000 }; timer.Tick += (_, __) => { var now = DateTime.Now; _clockStatus.Text = now.ToString("HH:mm:ss"); _dateStatus.Text = now.ToString("yyyy-MM-dd"); CheckTimeouts(); }; timer.Start(); Tag = timer;
             AddLog("系统启动完成"); Activate();
         }
         private void OnClosing(object sender, FormClosingEventArgs e)
@@ -272,7 +274,7 @@ namespace AirtightInspection.Forms
                 CompleteKeyboardBarcode(); e.Handled = true; return;
             }
             var resetThreshold = Math.Max(2000, _keyboardFinalizeTimer.Interval * 4);
-            if ((DateTime.Now - _lastKeyTime).TotalMilliseconds > resetThreshold) _keyboardBuffer.Clear();
+            if ((DateTime.Now - _lastKeyTime).TotalMilliseconds > resetThreshold) { _keyboardBuffer.Clear(); _keyboardOverflow = false; }
             if (!char.IsControl(e.KeyChar) || IsBarcodeSeparator(e.KeyChar))
             {
                 AppendKeyboardCharacter(e.KeyChar);
@@ -285,7 +287,7 @@ namespace AirtightInspection.Forms
 
         private void AppendKeyboardCharacter(char value)
         {
-            if (_keyboardBuffer.Length >= _config.MaxBarcodeLength) return;
+            if (_keyboardBuffer.Length >= _config.MaxBarcodeLength) { _keyboardOverflow = true; return; }
             _keyboardBuffer.Append(value);
             _lastKeyTime = DateTime.Now;
             _keyboardFinalizeTimer.Stop(); _keyboardFinalizeTimer.Start();
@@ -298,8 +300,21 @@ namespace AirtightInspection.Forms
         {
             _keyboardFinalizeTimer.Stop();
             var barcode = _keyboardBuffer.ToString().Trim();
+            var overflow = _keyboardOverflow;
             _keyboardBuffer.Clear();
+            _keyboardOverflow = false;
             if (barcode.Length == 0) return;
+            if (overflow || barcode.Length > _config.MaxBarcodeLength)
+            {
+                SetScanHint("● 扫码输入超过最大长度，已拒绝", IndustrialTheme.Danger);
+                AddLog("扫码输入超过最大长度，为防止条码被截断未进入队列");
+                return;
+            }
+            if (barcode.Length < _config.MinimumBarcodeLength)
+            {
+                SetScanHint($"● 扫码输入少于 {_config.MinimumBarcodeLength} 个字符，已忽略", IndustrialTheme.Warning);
+                return;
+            }
             Log.Info("扫码枪输入已接收，条码长度：{0}", barcode.Length);
             AddLog($"已接收扫码输入（{barcode.Length} 字符），请选择工位");
             HandleBarcode(barcode);

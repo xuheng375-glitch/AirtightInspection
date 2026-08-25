@@ -24,6 +24,7 @@ namespace AirtightInspection.Forms
         private readonly UILabel _countLabel;
         private readonly UIButton _queryButton;
         private List<ScanRecord> _results = new List<ScanRecord>();
+        private int _queryVersion;
 
         public RecordQueryForm(Database database)
         {
@@ -173,6 +174,7 @@ namespace AirtightInspection.Forms
                 IndustrialMessageBox.Show(this, "开始日期不能晚于结束日期。", "查询条件错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            var queryVersion = ++_queryVersion;
             _queryButton.Enabled = false;
             _countLabel.Text = "正在查询...";
             try
@@ -181,7 +183,9 @@ namespace AirtightInspection.Forms
                 var stationNo = (_station.SelectedItem as StationConfig)?.StationNo;
                 var productName = (_product.SelectedItem as ProductConfig)?.ProductName;
                 var barcode = _barcode.Text;
-                _results = await Task.Run(() => _database.QueryRecords(start, endExclusive, stationNo, productName, barcode));
+                var results = await Task.Run(() => _database.QueryRecords(start, endExclusive, stationNo, productName, barcode));
+                if (queryVersion != _queryVersion) return;
+                _results = results;
                 _grid.DataSource = null;
                 _grid.DataSource = _results;
                 _countLabel.Text = $"查询结果：{_results.Count} 条（最多显示 5000 条）";
@@ -189,10 +193,11 @@ namespace AirtightInspection.Forms
             catch (Exception ex)
             {
                 Log.Error(ex, "检测记录查询失败");
+                if (queryVersion != _queryVersion) return;
                 _countLabel.Text = "查询失败";
                 IndustrialMessageBox.Show(this, "查询失败：" + ex.Message, "查询失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            finally { _queryButton.Enabled = true; }
+            finally { if (queryVersion == _queryVersion) _queryButton.Enabled = true; }
         }
 
         private void ResetFilters(bool query)

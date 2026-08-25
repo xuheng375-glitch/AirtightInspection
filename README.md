@@ -36,6 +36,7 @@ powershell -ExecutionPolicy Bypass -File .\installer\Build-Installer.ps1
 4. 进入“工位配置”新增并启用工位，再从主界面新增产品。
 5. 键盘扫码模式下先点击主窗口再扫码；回车或换行会立即提交，Tab、GS 等字段分隔符会作为条码内容保留。未配置结束符时会在扫码输入结束约 400ms 后自动提交。串口模式需配置 COM 口参数。
 6. 正式运行必须使用实际扫码设备输入条码；程序不提供二维码模拟测试入口。
+7. 扫码长度默认允许 6–200 个字符，可通过 `[Scanner] MinBarcodeLength` 和 `MaxBarcodeLength` 调整；超长数据会整条拒绝，不会截断入库。
 
 ## 数据库维护
 

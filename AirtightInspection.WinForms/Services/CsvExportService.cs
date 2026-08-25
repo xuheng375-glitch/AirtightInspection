@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,14 +11,23 @@ namespace AirtightInspection.Services
     {
         public static Task ExportAsync(string path, IEnumerable<ScanRecord> records) => Task.Run(() =>
         {
-            using (var writer = new StreamWriter(path, false, new UTF8Encoding(true)))
+            var fullPath = Path.GetFullPath(path);
+            var directory = Path.GetDirectoryName(fullPath) ?? AppContext.BaseDirectory;
+            Directory.CreateDirectory(directory);
+            var temporaryPath = Path.Combine(directory, "." + Path.GetFileName(fullPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+            try
             {
-                writer.WriteLine("时间,工位号,工位名称,产品名称,条码,气密字符串,状态");
-                foreach (var item in records)
-                    writer.WriteLine(string.Join(",", Escape(item.DetectTime?.ToString("yyyy-MM-dd HH:mm:ss.fff") ?? ""),
-                        item.StationNo.ToString(), Escape(item.StationName), Escape(item.ProductName), Escape(item.Barcode),
-                        Escape(item.AirtightString), Escape(item.StatusText)));
+                using (var writer = new StreamWriter(temporaryPath, false, new UTF8Encoding(true)))
+                {
+                    writer.WriteLine("时间,工位号,工位名称,产品名称,条码,气密字符串,状态");
+                    foreach (var item in records)
+                        writer.WriteLine(string.Join(",", Escape(item.DetectTime?.ToString("yyyy-MM-dd HH:mm:ss.fff") ?? ""),
+                            item.StationNo.ToString(), Escape(item.StationName), Escape(item.ProductName), Escape(item.Barcode),
+                            Escape(item.AirtightString), Escape(item.StatusText)));
+                }
+                File.Move(temporaryPath, fullPath, true);
             }
+            finally { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); }
         });
 
         private static string Escape(string value)

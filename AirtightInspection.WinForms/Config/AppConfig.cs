@@ -50,6 +50,7 @@ namespace AirtightInspection.Config
         public string ScannerStopBits => _ini.Get("Scanner", "StopBits", "1");
         public string ScannerParity => _ini.Get("Scanner", "Parity", "None");
         public int ScannerLineEnd => _ini.GetInt("Scanner", "LineEnd", 13);
+        public int MinimumBarcodeLength => Math.Min(MaxBarcodeLength, Math.Max(1, _ini.GetInt("Scanner", "MinBarcodeLength", 6)));
         public int MaxBarcodeLength => Math.Max(1, _ini.GetInt("Scanner", "MaxBarcodeLength", 200));
         public int KeyboardCharTimeoutMs => Math.Max(20, _ini.GetInt("Scanner", "KeyboardCharTimeoutMs", 100));
         public string Password => _ini.Get("Security", "Password", "123456");

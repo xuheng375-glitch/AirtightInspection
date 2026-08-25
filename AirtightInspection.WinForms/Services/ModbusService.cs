@@ -50,13 +50,31 @@ namespace AirtightInspection.Services
         public void WriteAck(bool success)
         {
             if (!_config.EnableWriteAck) return;
-            lock (_sync)
+            var words = EncodingHelper.EncodeInt32(success ? _config.AckValue : _config.AckValueFail,
+                _config.WordOrder, _config.ByteOrder);
+            Exception lastError = null;
+            for (var attempt = 1; attempt <= 3; attempt++)
             {
-                if (_master == null) throw new InvalidOperationException("PLC 未连接");
-                var words = EncodingHelper.EncodeInt32(success ? _config.AckValue : _config.AckValueFail,
-                    _config.WordOrder, _config.ByteOrder);
-                _master.WriteMultipleRegisters(_config.SlaveId, _config.AckAddr, words);
+                try
+                {
+                    EnsureConnected();
+                    lock (_sync)
+                    {
+                        if (_master == null) throw new InvalidOperationException("PLC 未连接");
+                        _master.WriteMultipleRegisters(_config.SlaveId, _config.AckAddr, words);
+                    }
+                    if (attempt > 1) RaiseMessage($"PLC 应答第 {attempt} 次写入成功");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex;
+                    Log.Warn(ex, "PLC 应答第 {0} 次写入失败", attempt);
+                    Disconnect();
+                    if (attempt < 3) Thread.Sleep(200);
+                }
             }
+            throw new InvalidOperationException("PLC 应答连续 3 次写入失败", lastError);
         }
 
         private async Task PollLoop(CancellationToken token)
