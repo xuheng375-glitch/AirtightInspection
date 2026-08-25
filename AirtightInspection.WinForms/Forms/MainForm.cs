@@ -39,7 +39,7 @@ namespace AirtightInspection.Forms
             _inspection = new InspectionService(database, _pending, _modbus);
             _keyboardFinalizeTimer = new Timer
             {
-                Interval = Math.Min(300, Math.Max(120, config.KeyboardCharTimeoutMs + 50))
+                Interval = Math.Min(800, Math.Max(350, config.KeyboardCharTimeoutMs * 4))
             };
             _keyboardFinalizeTimer.Tick += (_, __) =>
             {
@@ -213,9 +213,14 @@ namespace AirtightInspection.Forms
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             var keyCode = keyData & Keys.KeyCode;
-            if (CanCaptureKeyboardScan() && (keyCode == Keys.Enter || keyCode == Keys.Tab))
+            if (CanCaptureKeyboardScan() && keyCode == Keys.Enter)
             {
                 CompleteKeyboardBarcode();
+                return true;
+            }
+            if (CanCaptureKeyboardScan() && keyCode == Keys.Tab)
+            {
+                AppendKeyboardCharacter('\t');
                 return true;
             }
             return base.ProcessCmdKey(ref msg, keyData);
@@ -228,14 +233,24 @@ namespace AirtightInspection.Forms
             {
                 CompleteKeyboardBarcode(); e.Handled = true; return;
             }
-            if ((DateTime.Now - _lastKeyTime).TotalMilliseconds > _config.KeyboardCharTimeoutMs) _keyboardBuffer.Clear();
-            _lastKeyTime = DateTime.Now;
-            if (!char.IsControl(e.KeyChar) && _keyboardBuffer.Length < _config.MaxBarcodeLength)
+            var resetThreshold = Math.Max(2000, _keyboardFinalizeTimer.Interval * 4);
+            if ((DateTime.Now - _lastKeyTime).TotalMilliseconds > resetThreshold) _keyboardBuffer.Clear();
+            if (!char.IsControl(e.KeyChar) || IsBarcodeSeparator(e.KeyChar))
             {
-                _keyboardBuffer.Append(e.KeyChar);
-                _keyboardFinalizeTimer.Stop(); _keyboardFinalizeTimer.Start();
+                AppendKeyboardCharacter(e.KeyChar);
                 e.Handled = true;
             }
+        }
+
+        private static bool IsBarcodeSeparator(char value) =>
+            value == '\t' || value == '\x1C' || value == '\x1D' || value == '\x1E' || value == '\x1F';
+
+        private void AppendKeyboardCharacter(char value)
+        {
+            if (_keyboardBuffer.Length >= _config.MaxBarcodeLength) return;
+            _keyboardBuffer.Append(value);
+            _lastKeyTime = DateTime.Now;
+            _keyboardFinalizeTimer.Stop(); _keyboardFinalizeTimer.Start();
         }
 
         private bool CanCaptureKeyboardScan() =>

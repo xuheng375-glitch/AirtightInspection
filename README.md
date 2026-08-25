@@ -32,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File .\installer\Build-Installer.ps1
 2. 运行 `AirtightInspection.exe`。首次运行会自动建立 `Data\mydb.db`、`Logs` 和 `ProductManual`。
 3. 默认管理密码为 `123456`，可在 `[Security] Password` 修改。
 4. 进入“工位配置”新增并启用工位，再从主界面新增产品。
-5. 键盘扫码模式下先点击主窗口再扫码；支持回车、换行、Tab 后缀，未配置结束符时也会在扫码输入短暂停顿后自动提交。串口模式需配置 COM 口参数。
+5. 键盘扫码模式下先点击主窗口再扫码；回车或换行会立即提交，Tab、GS 等字段分隔符会作为条码内容保留。未配置结束符时会在扫码输入结束约 400ms 后自动提交。串口模式需配置 COM 口参数。
 6. 正式运行必须使用实际扫码设备输入条码；程序不提供二维码模拟测试入口。
 
 ## PLC 联调
