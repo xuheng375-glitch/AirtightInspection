@@ -1,0 +1,29 @@
+# Visual Studio / .NET build output
+**/bin/
+**/obj/
+.vs/
+
+# Generated publish and installer output
+artifacts/
+publish/
+*.zip
+
+# Runtime data (never commit production records)
+**/Data/
+**/Logs/
+**/ProductManual/
+*.db
+*.db-shm
+*.db-wal
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Temporary files
+*.tmp
+*.bak
+Thumbs.db
+Desktop.ini

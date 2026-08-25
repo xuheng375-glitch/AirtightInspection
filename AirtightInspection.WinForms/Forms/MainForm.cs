@@ -1,0 +1,273 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using AirtightInspection.Config;
+using AirtightInspection.Data;
+using AirtightInspection.Models;
+using AirtightInspection.Services;
+using NLog;
+using Sunny.UI;
+
+namespace AirtightInspection.Forms
+{
+    public sealed class MainForm : UIForm
+    {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
+        private readonly AppConfig _config; private readonly Database _database;
+        private readonly PendingRecordService _pending; private readonly ModbusService _modbus;
+        private readonly ScannerService _scanner; private readonly InspectionService _inspection;
+        private readonly ComboBox _products; private readonly DataGridView _records, _pendingGrid;
+        private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _focusHint, _pendingStatus, _clockStatus;
+        private readonly StringBuilder _keyboardBuffer = new StringBuilder(); private DateTime _lastKeyTime;
+
+        [DllImport("user32.dll")] private static extern bool ReleaseCapture();
+        [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+        public MainForm(AppConfig config, Database database)
+        {
+            _config = config; _database = database; _pending = new PendingRecordService();
+            _modbus = new ModbusService(config); _scanner = new ScannerService(config);
+            _inspection = new InspectionService(database, _pending, _modbus);
+            Text = "气密检测数据采集系统"; Width = 1380; Height = 850; StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle = FormBorderStyle.None; KeyPreview = true; MinimumSize = new Size(1100, 700); WindowState = FormWindowState.Maximized;
+            IndustrialTheme.ApplyWindowIcon(this);
+            Image brandImage = null;
+            var brandIconPath = Path.Combine(_config.BaseDirectory, "BrandIcon.png");
+            if (File.Exists(brandIconPath)) try
+            {
+                using (var source = Image.FromFile(brandIconPath)) brandImage = new Bitmap(source);
+            }
+            catch (Exception ex) { Log.Warn(ex, "左侧品牌图标加载失败"); }
+            if (brandImage == null && Icon != null) brandImage = Icon.ToBitmap();
+
+            MouseEventHandler drag = (_, e) => { if (e.Button == MouseButtons.Left) { ReleaseCapture(); SendMessage(Handle, 0xA1, 0x2, 0); } };
+
+            // 左侧工业控制栏
+            var sidebar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = Color.FromArgb(14, 23, 30), Padding = new Padding(10) };
+            sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 132)); sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+            var brand = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(14, 23, 30), Cursor = Cursors.SizeAll };
+            var brandIcon = new PictureBox { Location = new Point(8, 10), Size = new Size(58, 58), SizeMode = PictureBoxSizeMode.Zoom, Image = brandImage, BackColor = Color.Transparent };
+            var brandTitle = new Label { Text = "气密检测", Location = new Point(76, 11), AutoSize = true, ForeColor = IndustrialTheme.Accent, Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold) };
+            var brandSub = new Label { Text = "数据采集系统", Location = new Point(78, 43), AutoSize = true, ForeColor = IndustrialTheme.Muted, Font = new Font("Microsoft YaHei UI", 8F) };
+            var brandLine = new Panel { Location = new Point(8, 82), Height = 1, Width = 180, BackColor = IndustrialTheme.AccentDark };
+            var modeLabel = new Label { Text = "生产监控终端 / 01", Location = new Point(8, 94), AutoSize = true, ForeColor = Color.FromArgb(92, 122, 136), Font = new Font("Microsoft YaHei UI", 8F) };
+            brand.Controls.AddRange(new Control[] { brandIcon, brandTitle, brandSub, brandLine, modeLabel }); brand.MouseDown += drag; brandTitle.MouseDown += drag; brandSub.MouseDown += drag;
+            sidebar.Controls.Add(brand, 0, 0);
+
+            var navigation = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(0, 14, 0, 0), BackColor = Color.FromArgb(14, 23, 30) };
+            navigation.Controls.Add(NavigationButton("01  工位配置", OpenStations));
+            navigation.Controls.Add(NavigationButton("02  产品配置", OpenProducts));
+            navigation.Controls.Add(NavigationButton("03  作业指导书", OpenManual));
+            navigation.Controls.Add(NavigationButton("04  导出检测记录", ExportCsv));
+            sidebar.Controls.Add(navigation, 0, 1);
+
+            var sidebarFooter = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(14, 23, 30) };
+            _clockStatus = new Label { Text = "--:--:--", Dock = DockStyle.Top, Height = 34, ForeColor = IndustrialTheme.Text, Font = new Font("Consolas", 16F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
+            var dateLabel = new Label { Text = DateTime.Now.ToString("yyyy-MM-dd"), Dock = DockStyle.Top, Height = 24, ForeColor = IndustrialTheme.Muted, Font = new Font("Consolas", 9F), TextAlign = ContentAlignment.MiddleLeft };
+            var versionLabel = new Label { Text = "本地采集节点  ·  版本 1.0", Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.FromArgb(80, 109, 122), Font = new Font("Microsoft YaHei UI", 8F) };
+            sidebarFooter.Controls.Add(versionLabel); sidebarFooter.Controls.Add(dateLabel); sidebarFooter.Controls.Add(_clockStatus); sidebar.Controls.Add(sidebarFooter, 0, 2);
+
+            // 顶部设备状态卡
+            var statusGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = IndustrialTheme.Background, Padding = new Padding(2) };
+            for (var i = 0; i < 3; i++) statusGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+            _plcStatus = StatusValue("离线", IndustrialTheme.Danger);
+            _stationStatus = StatusValue("--", IndustrialTheme.Text);
+            _pendingStatus = StatusValue("00", IndustrialTheme.Text);
+            statusGrid.Controls.Add(StatusCard("控制器连接状态", _plcStatus, IndustrialTheme.Danger), 0, 0);
+            statusGrid.Controls.Add(StatusCard("PLC当前的工位号", _stationStatus, IndustrialTheme.Accent), 1, 0);
+            statusGrid.Controls.Add(StatusCard("待检测记录数量", _pendingStatus, IndustrialTheme.Success), 2, 0);
+            statusGrid.MouseDown += drag;
+
+            // 产品与窗口命令区
+            var productBar = new Panel { Dock = DockStyle.Fill, BackColor = IndustrialTheme.Panel, Padding = new Padding(10, 7, 8, 6) };
+            var productCommands = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, BackColor = IndustrialTheme.Panel, Padding = new Padding(2, 1, 0, 0) };
+            var productCaption = UiFactory.Label("当前生产产品"); productCaption.ForeColor = IndustrialTheme.Accent; productCaption.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+            _products = new ComboBox { Width = 420, Height = 38, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(12, 0, 18, 0), Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold) };
+            _focusHint = UiFactory.Label(_scanner.IsKeyboardMode ? "● 请点击本窗口后扫码" : "● 串口扫码枪已启用"); _focusHint.ForeColor = IndustrialTheme.Warning;
+            productCommands.Controls.AddRange(new Control[] { productCaption, _products, _focusHint });
+            var windowButtons = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 100, Padding = new Padding(0, 2, 0, 0), FlowDirection = FlowDirection.LeftToRight, BackColor = IndustrialTheme.Panel };
+            var minimizeButton = new Button { Text = "—", Width = 42, Height = 32, Margin = new Padding(2) };
+            var closeButton = new Button { Text = "×", Width = 42, Height = 32, Margin = new Padding(2) };
+            IndustrialTheme.StyleButton(minimizeButton); IndustrialTheme.StyleButton(closeButton, true);
+            minimizeButton.Click += (_, __) => WindowState = FormWindowState.Minimized; closeButton.Click += (_, __) => Close();
+            windowButtons.Controls.Add(minimizeButton); windowButtons.Controls.Add(closeButton); productBar.Controls.Add(productCommands); productBar.Controls.Add(windowButtons);
+
+            // 实时数据与事件流
+            var upper = new SplitContainer { Dock = DockStyle.Fill, BackColor = IndustrialTheme.Background, SplitterWidth = 6 };
+            upper.Resize += (_, __) =>
+            {
+                if (upper.Width < 800) return;
+                var target = Math.Max(500, Math.Min(upper.Width - 280, (int)(upper.Width * 0.68)));
+                if (target > 0 && target < upper.Width) upper.SplitterDistance = target;
+            };
+            _records = CreateRecordsGrid(); _pendingGrid = CreatePendingGrid();
+            _records.CellDoubleClick += (_, e) => ShowRecordDetail(e.RowIndex);
+            upper.Panel1.Controls.Add(WrapWithTitle("检测记录", _records)); upper.Panel2.Controls.Add(WrapWithTitle("待检测记录（仅内存）", _pendingGrid));
+            _logList = new ListBox { Dock = DockStyle.Fill, HorizontalScrollbar = true };
+            var content = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, BackColor = IndustrialTheme.Background, Padding = new Padding(7) };
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 92)); content.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); content.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
+            content.Controls.Add(statusGrid, 0, 0); content.Controls.Add(productBar, 0, 1); content.Controls.Add(upper, 0, 2); content.Controls.Add(WrapWithTitle("运行事件日志", _logList), 0, 3);
+
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, BackColor = IndustrialTheme.Background, Padding = new Padding(1) };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 218)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.Controls.Add(sidebar, 0, 0); root.Controls.Add(content, 1, 0); Controls.Add(root);
+
+            IndustrialTheme.Apply(this);
+            IndustrialTheme.StyleButton(closeButton, true);
+            brandTitle.ForeColor = IndustrialTheme.Accent; productCaption.ForeColor = IndustrialTheme.Accent; _focusHint.ForeColor = IndustrialTheme.Warning;
+            _plcStatus.ForeColor = IndustrialTheme.Danger;
+
+            _pending.Changed += (_, __) => SafeUi(RefreshPending);
+            _modbus.ConnectionChanged += (_, connected) => SafeUi(() => SetConnection(connected));
+            _modbus.StationChanged += (_, station) => SafeUi(() => _stationStatus.Text = station.ToString("00"));
+            _modbus.Message += (_, text) => AddLog(text); _scanner.Message += (_, text) => AddLog(text);
+            _scanner.BarcodeReceived += (_, barcode) => SafeUi(() => HandleBarcode(barcode));
+            _inspection.Message += (_, text) => AddLog(text); _inspection.RecordsChanged += (_, __) => SafeUi(RefreshRecords);
+            KeyPress += OnKeyPress; Shown += OnShown; FormClosing += OnClosing;
+        }
+
+        private static Button NavigationButton(string text, EventHandler click)
+        {
+            var button = new Button { Text = text, Width = 190, Height = 46, Margin = new Padding(0, 0, 0, 8),
+                TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(14, 0, 0, 0), Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold) };
+            IndustrialTheme.StyleButton(button); button.FlatAppearance.BorderSize = 0; button.BackColor = IndustrialTheme.Surface;
+            button.Click += click; return button;
+        }
+
+        private static Label StatusValue(string text, Color color) => new Label
+        {
+            Text = text, Dock = DockStyle.Fill, ForeColor = color, TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Microsoft YaHei UI", 16F, FontStyle.Bold), AutoEllipsis = true
+        };
+
+        private static Control StatusCard(string caption, Label value, Color accent)
+        {
+            var card = new IndustrialCard { Dock = DockStyle.Fill, AccentColor = accent };
+            var title = new Label { Text = caption, Dock = DockStyle.Top, Height = 24, ForeColor = IndustrialTheme.Muted,
+                Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
+            card.Controls.Add(value); card.Controls.Add(title); return card;
+        }
+
+        private static Control WrapWithTitle(string title, Control content)
+        {
+            var group = new GroupBox { Text = "  " + title.ToUpperInvariant() + "  ", Dock = DockStyle.Fill, Padding = new Padding(8),
+                BackColor = IndustrialTheme.Panel, ForeColor = IndustrialTheme.Accent }; group.Controls.Add(content); return group;
+        }
+        private static DataGridView BaseGrid() => new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
+            AutoGenerateColumns = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            BackgroundColor = IndustrialTheme.Background };
+        private static DataGridView CreateRecordsGrid()
+        {
+            var grid = BaseGrid();
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "DetectTime", HeaderText = "时间", FillWeight = 115, MinimumWidth = 170, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss.fff" } });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位号", FillWeight = 40, MinimumWidth = 60 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationName", HeaderText = "工位名称", FillWeight = 55, MinimumWidth = 80 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名称", FillWeight = 75, MinimumWidth = 100 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "Barcode", HeaderText = "条码", FillWeight = 150, MinimumWidth = 180 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "AirtightString", HeaderText = "气密字符串", FillWeight = 185, MinimumWidth = 230 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StatusText", HeaderText = "状态", FillWeight = 65, MinimumWidth = 110 }); return grid;
+        }
+        private static DataGridView CreatePendingGrid()
+        {
+            var grid = BaseGrid();
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位号", FillWeight = 50 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "Barcode", HeaderText = "条码" });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名" });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ScanTime", HeaderText = "扫码时间", DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss" } }); return grid;
+        }
+
+        private void OnShown(object sender, EventArgs e)
+        {
+            RefreshProducts(); RefreshRecords(); RefreshPending(); _scanner.Start(); _modbus.Start();
+            var timer = new Timer { Interval = 1000 }; timer.Tick += (_, __) => { _clockStatus.Text = DateTime.Now.ToString("HH:mm:ss"); CheckTimeouts(); }; timer.Start(); Tag = timer;
+            AddLog("系统启动完成"); Activate();
+        }
+        private void OnClosing(object sender, FormClosingEventArgs e)
+        {
+            if (_pending.Snapshot().Count > 0 && MessageBox.Show("仍有待检测记录，退出后这些内存数据将丢失。确认退出？", "退出确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { e.Cancel = true; return; }
+            (Tag as Timer)?.Stop(); _scanner.Dispose(); _modbus.Dispose();
+        }
+        private void OnKeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (!_scanner.IsKeyboardMode || !ContainsFocus || Application.OpenForms.Count > 1) return;
+            if ((DateTime.Now - _lastKeyTime).TotalMilliseconds > _config.KeyboardCharTimeoutMs) _keyboardBuffer.Clear();
+            _lastKeyTime = DateTime.Now;
+            if (e.KeyChar == '\r') { var barcode = _keyboardBuffer.ToString().Trim(); _keyboardBuffer.Clear(); if (barcode.Length > 0) HandleBarcode(barcode); e.Handled = true; return; }
+            if (!char.IsControl(e.KeyChar) && _keyboardBuffer.Length < _config.MaxBarcodeLength) _keyboardBuffer.Append(e.KeyChar);
+        }
+        private void HandleBarcode(string barcode)
+        {
+            var stations = _database.GetStations(true); if (stations.Count == 0) { MessageBox.Show("没有启用中的工位，请先配置工位"); return; }
+            using (var dialog = new ScanStationForm(barcode, stations))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK || dialog.SelectedStation == null) return;
+                PendingRecord old; var station = dialog.SelectedStation;
+                if (_pending.TryGet(station.StationNo, out old) && MessageBox.Show($"该工位已有待检测条码 [{old.Barcode}]，是否用新条码 [{barcode}] 覆盖？", "覆盖确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                var product = _products.SelectedItem as ProductConfig;
+                _pending.AddOrReplace(new PendingRecord { StationNo = station.StationNo, StationName = station.StationName,
+                    Barcode = barcode, ProductName = product?.ProductName ?? string.Empty, ScanTime = DateTime.Now });
+                Log.Info("扫码 {0} 已分配到工位 {1}，产品 {2}", barcode, station.StationNo, product?.ProductName ?? string.Empty);
+                AddLog($"扫码 {barcode} 已分配到工位 {station.StationNo}");
+            }
+        }
+        private void CheckTimeouts()
+        {
+            var expired = _pending.RemoveExpired(_config.WaitTimeoutSec);
+            foreach (var item in expired) AddLog($"工位 {item.StationNo} 待检测条码 {item.Barcode} 已超时作废");
+            if (expired.Count > 0) MessageBox.Show($"已有 {expired.Count} 条待检测记录超时作废，请查看运行日志。", "超时提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        private void OpenManual(object sender, EventArgs e)
+        {
+            var product = _products.SelectedItem as ProductConfig; if (product == null) { MessageBox.Show("请先选择产品"); return; }
+            using (var form = new ManualViewerForm(_config.ManualFolder, product.ProductName)) form.ShowDialog(this);
+        }
+        private void OpenStations(object sender, EventArgs e)
+        {
+            using (var form = new StationConfigForm(_database, _config)) form.ShowDialog(this);
+        }
+        private void OpenProducts(object sender, EventArgs e)
+        {
+            var selected = (_products.SelectedItem as ProductConfig)?.ProductName;
+            using (var form = new ProductConfigForm(_database, _config)) form.ShowDialog(this);
+            RefreshProducts(selected);
+        }
+        private async void ExportCsv(object sender, EventArgs e)
+        {
+            using (var dialog = new SaveFileDialog { Filter = "CSV 文件|*.csv", FileName = "检测记录_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv" })
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                try { AddLog("正在导出 CSV..."); var records = await Task.Run(() => _database.GetRecords()); await CsvExportService.ExportAsync(dialog.FileName, records); AddLog("CSV 导出成功：" + dialog.FileName); MessageBox.Show("导出完成"); }
+                catch (Exception ex) { Log.Error(ex, "CSV 导出失败"); AddLog("CSV 导出失败：" + ex.Message); MessageBox.Show("导出失败：" + ex.Message); }
+            }
+        }
+        private void RefreshProducts(string selectName = null)
+        {
+            var products = _database.GetProducts(); _products.DataSource = products;
+            if (!string.IsNullOrEmpty(selectName)) for (var i = 0; i < products.Count; i++) if (products[i].ProductName == selectName) { _products.SelectedIndex = i; break; }
+        }
+        private void RefreshRecords() { _records.DataSource = _database.GetRecords(_config.DisplayRecordLimit); }
+        private void RefreshPending()
+        {
+            var items = new List<PendingRecord>(_pending.Snapshot()); _pendingGrid.DataSource = items;
+            _pendingStatus.Text = items.Count.ToString("00"); _pendingStatus.ForeColor = items.Count == 0 ? IndustrialTheme.Text : IndustrialTheme.Warning;
+        }
+        private void ShowRecordDetail(int rowIndex)
+        {
+            if (rowIndex < 0) return; var item = _records.Rows[rowIndex].DataBoundItem as ScanRecord; if (item == null) return;
+            MessageBox.Show($"检测时间：{item.DetectTime:yyyy-MM-dd HH:mm:ss.fff}\n工位：{item.StationNo} - {item.StationName}\n产品：{item.ProductName}\n条码：{item.Barcode}\n气密字符串：{item.AirtightString}\n状态：{item.StatusText}", "检测记录详情");
+        }
+        private void SetConnection(bool connected)
+        {
+            _plcStatus.Text = connected ? "在线" : "离线"; _plcStatus.ForeColor = connected ? IndustrialTheme.Success : IndustrialTheme.Danger;
+            var card = _plcStatus.Parent as IndustrialCard; if (card != null) { card.AccentColor = _plcStatus.ForeColor; card.Invalidate(); }
+        }
+        private void AddLog(string text) => SafeUi(() => { _logList.Items.Insert(0, DateTime.Now.ToString("HH:mm:ss") + "  " + text); while (_logList.Items.Count > 300) _logList.Items.RemoveAt(_logList.Items.Count - 1); });
+        private void SafeUi(Action action) { if (IsDisposed || !IsHandleCreated) return; if (InvokeRequired) BeginInvoke(action); else action(); }
+    }
+}
