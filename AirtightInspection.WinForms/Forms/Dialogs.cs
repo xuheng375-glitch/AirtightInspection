@@ -100,9 +100,9 @@ namespace AirtightInspection.Forms
 
             panel.Controls.Add(new Label
             {
-                Text = "请选择检测工位",
+                Text = "● 已检测到扫码枪输入，请选择检测工位",
                 Dock = DockStyle.Fill,
-                ForeColor = IndustrialTheme.Text,
+                ForeColor = IndustrialTheme.Success,
                 Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleLeft
             }, 0, 1);

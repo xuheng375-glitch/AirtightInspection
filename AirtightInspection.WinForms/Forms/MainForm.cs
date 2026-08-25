@@ -268,6 +268,9 @@ namespace AirtightInspection.Forms
         }
         private void HandleBarcode(string barcode)
         {
+            _focusHint.Text = $"● 已检测到扫码枪输入（{barcode.Length} 字符）";
+            _focusHint.ForeColor = IndustrialTheme.Success;
+            _focusHint.Refresh();
             if (_enabledStations.Count == 0) RefreshStations();
             if (_enabledStations.Count == 0) { MessageBox.Show("没有启用中的工位，请先配置工位"); return; }
             var preparation = Stopwatch.StartNew();
