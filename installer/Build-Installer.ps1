@@ -35,9 +35,28 @@ if (-not (Test-Path -LiteralPath $languageFile)) {
     Invoke-WebRequest -UseBasicParsing -Uri $languageUrl -OutFile $languageFile
 }
 
-& $iscc "/O$installerDir" $innoScript
-if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed with exit code $LASTEXITCODE" }
+$tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$compilerOutputDir = [System.IO.Path]::GetFullPath((Join-Path $tempRoot ('AirtightInspectionInstaller_' + [Guid]::NewGuid().ToString('N'))))
+if (-not $compilerOutputDir.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to use a compiler output directory outside the system temp root: $compilerOutputDir"
+}
+New-Item -ItemType Directory -Path $compilerOutputDir | Out-Null
+try {
+    # Compiling directly into a watched Desktop folder can cause antivirus to
+    # lock Setup.exe while Inno Setup updates its resources (Win32 error 110).
+    & $iscc "/O$compilerOutputDir" $innoScript
+    if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed with exit code $LASTEXITCODE" }
+
+    $compiledSetup = Get-ChildItem -LiteralPath $compilerOutputDir -Filter '*.exe' | Select-Object -First 1
+    if (-not $compiledSetup) { throw 'Installer compilation completed without an output EXE.' }
+    Copy-Item -LiteralPath $compiledSetup.FullName -Destination (Join-Path $installerDir $compiledSetup.Name) -Force
+}
+finally {
+    if (Test-Path -LiteralPath $compilerOutputDir) {
+        Remove-Item -LiteralPath $compilerOutputDir -Recurse -Force
+    }
+}
 
 $setup = Get-ChildItem -LiteralPath $installerDir -Filter '*.exe' | Select-Object -First 1
-if (-not $setup) { throw 'Installer compilation completed without an output EXE.' }
+if (-not $setup) { throw 'Installer copy completed without an output EXE.' }
 Write-Output "Installer created: $($setup.FullName)"
