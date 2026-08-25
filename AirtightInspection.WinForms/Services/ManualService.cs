@@ -8,7 +8,7 @@ namespace AirtightInspection.Services
     public static class ManualService
     {
         private static readonly HashSet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { ".jpg", ".jpeg", ".png", ".bmp", ".gif" };
+            { ".jpg", ".jpeg", ".jfif", ".png", ".bmp", ".gif" };
         public static List<string> FindImages(string folder, string product)
         {
             Directory.CreateDirectory(folder);
