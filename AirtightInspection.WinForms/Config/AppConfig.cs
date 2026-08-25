@@ -32,7 +32,7 @@ namespace AirtightInspection.Config
         public string WordOrder => _ini.Get("Register", "WordOrder", "LowHigh");
         public string ByteOrder => _ini.Get("Register", "ByteOrder", "BigEndian");
         public int CharsPerRegister => _ini.GetInt("Register", "CharsPerRegister", 2);
-        public string StringByteOrder => _ini.Get("Register", "StringByteOrder", "HighLow");
+        public string StringByteOrder => _ini.Get("Register", "StringByteOrder", "LowHigh");
         public string StringEncoding => _ini.Get("Register", "StringEncoding", "ASCII");
         public int StringHeaderBytes => Math.Max(0, _ini.GetInt("Register", "StringHeaderBytes", 0));
         public string DatabasePath => Resolve(_ini.Get("Database", "FilePath", @"Data\mydb.db"));
