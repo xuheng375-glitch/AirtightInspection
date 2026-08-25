@@ -63,7 +63,7 @@ namespace AirtightInspection.Forms
                 if (dialog.ShowDialog(this) != DialogResult.OK) return false;
                 if (dialog.Value == _config.Password) return true;
                 Log.Warn("{0}密码校验失败", operation);
-                MessageBox.Show("密码错误，操作未执行", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                IndustrialMessageBox.Show(this, "密码错误，操作未执行", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
         }
@@ -74,7 +74,7 @@ namespace AirtightInspection.Forms
             {
                 if (input.ShowDialog(this) != DialogResult.OK) return;
                 var error = ValidationHelper.ValidateProductName(input.Value);
-                if (error != null) { MessageBox.Show(error); return; }
+                if (error != null) { IndustrialMessageBox.Show(this, error, "输入错误", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
                 if (!Authenticate("新增产品")) return;
                 TryChange(() => _database.AddProduct(input.Value), "产品新增成功：" + input.Value);
             }
@@ -82,12 +82,12 @@ namespace AirtightInspection.Forms
 
         private void Rename(object sender, EventArgs e)
         {
-            var product = Selected; if (product == null) { MessageBox.Show("请先选择产品"); return; }
+            var product = Selected; if (product == null) { IndustrialMessageBox.Show(this, "请先选择产品", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             using (var input = new TextInputForm("重命名产品", "请输入新产品名称：", product.ProductName))
             {
                 if (input.ShowDialog(this) != DialogResult.OK) return;
                 var error = ValidationHelper.ValidateProductName(input.Value);
-                if (error != null) { MessageBox.Show(error); return; }
+                if (error != null) { IndustrialMessageBox.Show(this, error, "输入错误", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
                 if (!Authenticate("重命名产品")) return;
                 TryChange(() => { _database.RenameProduct(product.Id, input.Value); return 0L; }, "产品重命名成功：" + input.Value);
             }
@@ -95,9 +95,9 @@ namespace AirtightInspection.Forms
 
         private void Delete(object sender, EventArgs e)
         {
-            var product = Selected; if (product == null) { MessageBox.Show("请先选择产品"); return; }
+            var product = Selected; if (product == null) { IndustrialMessageBox.Show(this, "请先选择产品", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             if (!Authenticate("删除产品")) return;
-            if (MessageBox.Show($"确认删除产品 {product.ProductName}？\n历史检测记录和指导书图片不会删除。", "二次确认",
+            if (IndustrialMessageBox.Show(this, $"确认删除产品 {product.ProductName}？\n历史检测记录和指导书图片不会删除。", "二次确认",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             TryChange(() => { _database.DeleteProduct(product.Id); return 0L; }, "产品删除成功：" + product.ProductName);
         }
@@ -105,8 +105,8 @@ namespace AirtightInspection.Forms
         private void TryChange(Func<long> action, string message)
         {
             try { action(); Log.Info(message); RefreshData(); }
-            catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { MessageBox.Show("产品名称已存在"); }
-            catch (Exception ex) { Log.Error(ex, "产品配置操作失败"); MessageBox.Show("操作失败：" + ex.Message); }
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { IndustrialMessageBox.Show(this, "产品名称已存在", "操作失败", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            catch (Exception ex) { Log.Error(ex, "产品配置操作失败"); IndustrialMessageBox.Show(this, "操作失败：" + ex.Message, "操作失败", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
 
         private void RefreshData() { _grid.DataSource = _database.GetProducts(); }

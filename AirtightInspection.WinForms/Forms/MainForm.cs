@@ -204,7 +204,7 @@ namespace AirtightInspection.Forms
         }
         private void OnClosing(object sender, FormClosingEventArgs e)
         {
-            if (_pending.Snapshot().Count > 0 && MessageBox.Show("仍有待检测记录，退出后这些内存数据将丢失。确认退出？", "退出确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { e.Cancel = true; return; }
+            if (_pending.Snapshot().Count > 0 && IndustrialMessageBox.Show(this, "仍有待检测记录，退出后这些内存数据将丢失。确认退出？", "退出确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { e.Cancel = true; return; }
             (Tag as Timer)?.Stop();
             _keyboardFinalizeTimer.Stop(); _keyboardFinalizeTimer.Dispose();
             _scanner.Dispose(); _modbus.Dispose();
@@ -273,7 +273,7 @@ namespace AirtightInspection.Forms
             if (_enabledStations.Count == 0)
             {
                 SetScanHint("● 扫码未入队：没有启用中的工位", IndustrialTheme.Danger);
-                MessageBox.Show("没有启用中的工位，请先配置工位"); return;
+                IndustrialMessageBox.Show(this, "没有启用中的工位，请先配置工位", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning); return;
             }
             var preparation = Stopwatch.StartNew();
             using (var dialog = new ScanStationForm(barcode, _enabledStations))
@@ -286,7 +286,7 @@ namespace AirtightInspection.Forms
                     return;
                 }
                 PendingRecord old; var station = dialog.SelectedStation;
-                if (_pending.TryGet(station.StationNo, out old) && MessageBox.Show($"该工位已有待检测条码 [{old.Barcode}]，是否用新条码 [{barcode}] 覆盖？", "覆盖确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                if (_pending.TryGet(station.StationNo, out old) && IndustrialMessageBox.Show(this, $"该工位已有待检测条码 [{old.Barcode}]，是否用新条码 [{barcode}] 覆盖？", "覆盖确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 {
                     SetScanHint("● 已取消覆盖，扫码未进入待检测队列", IndustrialTheme.Warning);
                     return;
@@ -310,11 +310,11 @@ namespace AirtightInspection.Forms
         {
             var expired = _pending.RemoveExpired(_config.WaitTimeoutSec);
             foreach (var item in expired) AddLog($"工位 {item.StationNo} 待检测条码 {item.Barcode} 已超时作废");
-            if (expired.Count > 0) MessageBox.Show($"已有 {expired.Count} 条待检测记录超时作废，请查看运行日志。", "超时提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (expired.Count > 0) IndustrialMessageBox.Show(this, $"已有 {expired.Count} 条待检测记录超时作废，请查看运行日志。", "超时提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         private void OpenManual(object sender, EventArgs e)
         {
-            var product = _products.SelectedItem as ProductConfig; if (product == null) { MessageBox.Show("请先选择产品"); return; }
+            var product = _products.SelectedItem as ProductConfig; if (product == null) { IndustrialMessageBox.Show(this, "请先选择产品", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             using (var form = new ManualViewerForm(_config.ManualFolder, product.ProductName)) form.ShowDialog(this);
         }
         private void OpenStations(object sender, EventArgs e)
@@ -333,8 +333,8 @@ namespace AirtightInspection.Forms
             using (var dialog = new SaveFileDialog { Filter = "CSV 文件|*.csv", FileName = "检测记录_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv" })
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                try { AddLog("正在导出 CSV..."); var records = await Task.Run(() => _database.GetRecords()); await CsvExportService.ExportAsync(dialog.FileName, records); AddLog("CSV 导出成功：" + dialog.FileName); MessageBox.Show("导出完成"); }
-                catch (Exception ex) { Log.Error(ex, "CSV 导出失败"); AddLog("CSV 导出失败：" + ex.Message); MessageBox.Show("导出失败：" + ex.Message); }
+                try { AddLog("正在导出 CSV..."); var records = await Task.Run(() => _database.GetRecords()); await CsvExportService.ExportAsync(dialog.FileName, records); AddLog("CSV 导出成功：" + dialog.FileName); IndustrialMessageBox.Show(this, "检测记录已成功导出。", "导出完成", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                catch (Exception ex) { Log.Error(ex, "CSV 导出失败"); AddLog("CSV 导出失败：" + ex.Message); IndustrialMessageBox.Show(this, "导出失败：" + ex.Message, "导出失败", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             }
         }
         private void RefreshProducts(string selectName = null)
@@ -362,7 +362,7 @@ namespace AirtightInspection.Forms
         private void ShowRecordDetail(int rowIndex)
         {
             if (rowIndex < 0) return; var item = _records.Rows[rowIndex].DataBoundItem as ScanRecord; if (item == null) return;
-            MessageBox.Show($"检测时间：{item.DetectTime:yyyy-MM-dd HH:mm:ss.fff}\n工位：{item.StationNo} - {item.StationName}\n产品：{item.ProductName}\n条码：{item.Barcode}\n气密字符串：{item.AirtightString}\n状态：{item.StatusText}", "检测记录详情");
+            IndustrialMessageBox.Show(this, $"检测时间：{item.DetectTime:yyyy-MM-dd HH:mm:ss.fff}\n工位：{item.StationNo} - {item.StationName}\n产品：{item.ProductName}\n条码：{item.Barcode}\n气密字符串：{item.AirtightString}\n状态：{item.StatusText}", "检测记录详情", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         private void SetConnection(bool connected)
         {

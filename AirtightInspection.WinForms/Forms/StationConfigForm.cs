@@ -47,7 +47,7 @@ namespace AirtightInspection.Forms
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return false;
                 if (dialog.Value == _config.Password) return true;
-                Log.Warn("工位配置密码校验失败"); MessageBox.Show("密码错误，操作未执行", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false;
+                Log.Warn("工位配置密码校验失败"); IndustrialMessageBox.Show(this, "密码错误，操作未执行", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false;
             }
         }
         private void Add(object sender, EventArgs e)
@@ -58,22 +58,22 @@ namespace AirtightInspection.Forms
         }
         private void Edit(object sender, EventArgs e)
         {
-            if (Selected == null) { MessageBox.Show("请先选择工位"); return; } if (!Authenticate()) return;
+            if (Selected == null) { IndustrialMessageBox.Show(this, "请先选择工位", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information); return; } if (!Authenticate()) return;
             var copy = new StationConfig { Id = Selected.Id, StationNo = Selected.StationNo, StationName = Selected.StationName, Enabled = Selected.Enabled, Remark = Selected.Remark };
             using (var dialog = new StationEditForm(copy)) if (dialog.ShowDialog(this) == DialogResult.OK)
                 TrySave(() => _database.UpdateStation(dialog.Station), "工位修改成功");
         }
         private void Delete(object sender, EventArgs e)
         {
-            if (Selected == null) { MessageBox.Show("请先选择工位"); return; } if (!Authenticate()) return;
-            if (MessageBox.Show($"确认删除工位 {Selected.StationNo} - {Selected.StationName}？\n历史检测记录不会删除。", "二次确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            if (Selected == null) { IndustrialMessageBox.Show(this, "请先选择工位", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information); return; } if (!Authenticate()) return;
+            if (IndustrialMessageBox.Show(this, $"确认删除工位 {Selected.StationNo} - {Selected.StationName}？\n历史检测记录不会删除。", "二次确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             TrySave(() => _database.DeleteStation(Selected.Id), "工位删除成功");
         }
         private void TrySave(Action action, string message)
         {
             try { action(); Log.Info(message); RefreshData(); StationsChanged?.Invoke(this, EventArgs.Empty); }
-            catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { MessageBox.Show("工位号已存在，请使用其他编号"); }
-            catch (Exception ex) { Log.Error(ex, "工位配置保存失败"); MessageBox.Show("操作失败：" + ex.Message); }
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { IndustrialMessageBox.Show(this, "工位号已存在，请使用其他编号", "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            catch (Exception ex) { Log.Error(ex, "工位配置保存失败"); IndustrialMessageBox.Show(this, "操作失败：" + ex.Message, "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
         private void RefreshData() { _grid.DataSource = _database.GetStations(); }
     }

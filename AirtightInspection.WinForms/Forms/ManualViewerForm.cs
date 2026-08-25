@@ -39,7 +39,7 @@ namespace AirtightInspection.Forms
             var heading = UiFactory.Label("◆ 作业指导书 / " + product); heading.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold); heading.ForeColor = IndustrialTheme.Accent;
             toolbar.Controls.AddRange(new Control[] { heading, _previous, _next, _page, _zoomOut, _zoomIn, _zoomLabel, UiFactory.Button("关闭", (_, __) => Close()) });
             toolbar.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) { ReleaseCapture(); SendMessage(Handle, 0xA1, 0x2, 0); } };
-            _viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Color.FromArgb(35, 35, 35) };
+            _viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = IndustrialTheme.Background };
             _picture = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.Transparent };
             _picture.DoubleClick += (_, __) => { _zoom = 100; ApplyZoom(); };
             _picture.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) { _dragging = true; _dragStart = e.Location; _scrollStart = new Point(-_viewport.AutoScrollPosition.X, -_viewport.AutoScrollPosition.Y); _picture.Cursor = Cursors.Hand; } };
@@ -73,7 +73,7 @@ namespace AirtightInspection.Forms
         }
         private void DrawEmpty(object sender, PaintEventArgs e)
         {
-            using (var brush = new SolidBrush(Color.White)) e.Graphics.DrawString("未找到该产品的作业指导书图片", Font, brush, 30, 30);
+            using (var brush = new SolidBrush(IndustrialTheme.Muted)) e.Graphics.DrawString("未找到该产品的作业指导书图片", Font, brush, 30, 30);
         }
         private void ApplyZoom()
         {

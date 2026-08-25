@@ -128,14 +128,20 @@ namespace AirtightInspection.Forms
                 else if (control is Label)
                 {
                     if (control.ForeColor == SystemColors.ControlText) control.ForeColor = Text;
-                    control.BackColor = Color.Transparent;
+                    if (control.BackColor == SystemColors.Control)
+                        control.BackColor = Color.Transparent;
                 }
                 else if (control is ListBox)
                 {
                     control.BackColor = Color.FromArgb(8, 14, 20); control.ForeColor = Color.FromArgb(159, 219, 230);
                 }
                 else if (control is Panel || control is FlowLayoutPanel || control is TableLayoutPanel)
-                    control.BackColor = Panel;
+                {
+                    // Keep deliberately assigned Background/Header/accent colors.
+                    // Only replace the WinForms default surface color.
+                    if (control.BackColor == SystemColors.Control)
+                        control.BackColor = Panel;
+                }
                 if (control.HasChildren) ApplyControl(control);
             }
         }

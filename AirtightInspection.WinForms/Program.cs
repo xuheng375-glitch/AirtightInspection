@@ -20,7 +20,7 @@ namespace AirtightInspection
             using var singleInstance = new Mutex(true, @"Local\AirtightInspection.DataAcquisition", out var isFirstInstance);
             if (!isFirstInstance)
             {
-                MessageBox.Show("气密检测数据采集系统已经在运行，请勿重复启动。", "提示",
+                IndustrialMessageBox.Show("气密检测数据采集系统已经在运行，请勿重复启动。", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -35,7 +35,7 @@ namespace AirtightInspection
             catch (Exception ex)
             {
                 LogManager.GetCurrentClassLogger().Fatal(ex, "程序启动失败");
-                MessageBox.Show("程序启动失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                IndustrialMessageBox.Show("程序启动失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally { LogManager.Shutdown(); }
         }

@@ -9,6 +9,129 @@ using Sunny.UI;
 
 namespace AirtightInspection.Forms
 {
+    public static class IndustrialMessageBox
+    {
+        public static DialogResult Show(string text) => Show(null, text, "提示", MessageBoxButtons.OK, MessageBoxIcon.None);
+        public static DialogResult Show(string text, string caption) => Show(null, text, caption, MessageBoxButtons.OK, MessageBoxIcon.None);
+        public static DialogResult Show(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon) =>
+            Show(null, text, caption, buttons, icon);
+        public static DialogResult Show(IWin32Window owner, string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon)
+        {
+            using (var dialog = new IndustrialMessageForm(text, caption, buttons, icon))
+                return owner == null ? dialog.ShowDialog() : dialog.ShowDialog(owner);
+        }
+    }
+
+    internal sealed class IndustrialMessageForm : UIForm
+    {
+        public IndustrialMessageForm(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon)
+        {
+            Text = string.IsNullOrWhiteSpace(caption) ? "提示" : caption;
+            Width = 540;
+            Height = 250;
+            MinimumSize = new Size(460, 220);
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.None;
+            KeyPreview = true;
+
+            var accent = icon switch
+            {
+                MessageBoxIcon.Error => IndustrialTheme.Danger,
+                MessageBoxIcon.Warning => IndustrialTheme.Warning,
+                _ => IndustrialTheme.Accent
+            };
+            var symbol = icon switch
+            {
+                MessageBoxIcon.Error => "×",
+                MessageBoxIcon.Warning => "!",
+                MessageBoxIcon.Question => "?",
+                _ => "i"
+            };
+
+            var body = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 2,
+                Padding = new Padding(24, 22, 24, 18),
+                BackColor = IndustrialTheme.Panel
+            };
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            body.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+
+            var iconPanel = new Panel { Size = new Size(52, 52), Anchor = AnchorStyles.Top | AnchorStyles.Left, BackColor = accent };
+            iconPanel.Controls.Add(new Label
+            {
+                Text = symbol,
+                Dock = DockStyle.Fill,
+                ForeColor = IndustrialTheme.Background,
+                Font = new Font("Microsoft YaHei UI", 21F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter
+            });
+            body.Controls.Add(iconPanel, 0, 0);
+            body.Controls.Add(new Label
+            {
+                Text = text ?? string.Empty,
+                Dock = DockStyle.Fill,
+                ForeColor = IndustrialTheme.Text,
+                Font = new Font("Microsoft YaHei UI", 10F),
+                TextAlign = ContentAlignment.MiddleLeft,
+                AutoEllipsis = true,
+                Padding = new Padding(4, 0, 0, 0)
+            }, 1, 0);
+
+            var commandBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false,
+                Padding = new Padding(0, 10, 0, 0),
+                Margin = new Padding(0)
+            };
+            body.SetColumnSpan(commandBar, 2);
+            body.Controls.Add(commandBar, 0, 1);
+
+            if (buttons == MessageBoxButtons.YesNo)
+            {
+                var no = UiFactory.Button("取消", (_, __) => Finish(DialogResult.No));
+                var yes = UiFactory.Button("确认", (_, __) => Finish(DialogResult.Yes));
+                no.AutoSize = yes.AutoSize = false;
+                no.Size = yes.Size = new Size(108, 38);
+                commandBar.Controls.Add(no);
+                commandBar.Controls.Add(yes);
+                AcceptButton = yes;
+                CancelButton = no;
+            }
+            else
+            {
+                var ok = UiFactory.Button("确定", (_, __) => Finish(DialogResult.OK));
+                ok.AutoSize = false;
+                ok.Size = new Size(108, 38);
+                commandBar.Controls.Add(ok);
+                AcceptButton = ok;
+                CancelButton = ok;
+            }
+
+            Controls.Add(body);
+            Controls.Add(UiFactory.Heading(Text, this));
+            IndustrialTheme.Apply(this);
+            Shown += (_, __) => Activate();
+            KeyDown += (_, e) =>
+            {
+                if (e.KeyCode == Keys.Escape)
+                    Finish(buttons == MessageBoxButtons.YesNo ? DialogResult.No : DialogResult.OK);
+            };
+        }
+
+        private void Finish(DialogResult result)
+        {
+            DialogResult = result;
+            Close();
+        }
+    }
+
     internal static class UiFactory
     {
         [DllImport("user32.dll")] private static extern bool ReleaseCapture();
@@ -190,7 +313,7 @@ namespace AirtightInspection.Forms
         {
             if (_selectedStation == null)
             {
-                MessageBox.Show(this, "请选择检测工位。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                IndustrialMessageBox.Show(this, "请选择检测工位。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             DialogResult = DialogResult.OK;
@@ -227,7 +350,7 @@ namespace AirtightInspection.Forms
         }
         private void Save(object sender, EventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(_name.Text)) { MessageBox.Show("工位名称不能为空"); return; }
+            if (string.IsNullOrWhiteSpace(_name.Text)) { IndustrialMessageBox.Show(this, "工位名称不能为空", "输入错误", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             Station.StationNo = (int)_number.Value; Station.StationName = _name.Text.Trim();
             Station.Enabled = _enabled.Checked; Station.Remark = _remark.Text.Trim(); DialogResult = DialogResult.OK; Close();
         }
