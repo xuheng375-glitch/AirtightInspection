@@ -121,6 +121,15 @@ namespace AirtightInspection.Forms
                 {
                     control.BackColor = Color.FromArgb(9, 16, 22); control.ForeColor = Text;
                 }
+                else if (control is DateTimePicker picker)
+                {
+                    picker.BackColor = Color.FromArgb(9, 16, 22);
+                    picker.ForeColor = Text;
+                    picker.CalendarMonthBackground = Panel;
+                    picker.CalendarForeColor = Text;
+                    picker.CalendarTitleBackColor = Header;
+                    picker.CalendarTitleForeColor = Accent;
+                }
                 else if (control is GroupBox)
                 {
                     control.BackColor = Panel; control.ForeColor = Accent;

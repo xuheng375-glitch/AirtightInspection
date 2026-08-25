@@ -162,6 +162,51 @@ FROM ScanRecord ORDER BY Id DESC" + (limit > 0 ? " LIMIT @limit" : string.Empty)
             return result;
         }
 
+        public List<ScanRecord> QueryRecords(DateTime startTime, DateTime endTimeExclusive,
+            int? stationNo, string productName, string barcodeKeyword, int limit = 5000)
+        {
+            var result = new List<ScanRecord>();
+            using (var connection = Open())
+            using (var command = connection.CreateCommand())
+            {
+                var conditions = new List<string>
+                {
+                    "DetectTime>=@startTime",
+                    "DetectTime<@endTime"
+                };
+                command.Parameters.Add(P("@startTime", startTime.ToString(TimeFormat)));
+                command.Parameters.Add(P("@endTime", endTimeExclusive.ToString(TimeFormat)));
+                if (stationNo.HasValue)
+                {
+                    conditions.Add("StationNo=@stationNo");
+                    command.Parameters.Add(P("@stationNo", stationNo.Value));
+                }
+                if (!string.IsNullOrWhiteSpace(productName))
+                {
+                    conditions.Add("ProductName=@productName");
+                    command.Parameters.Add(P("@productName", productName.Trim()));
+                }
+                if (!string.IsNullOrWhiteSpace(barcodeKeyword))
+                {
+                    conditions.Add("Barcode LIKE @barcode ESCAPE '\\'");
+                    var escaped = barcodeKeyword.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                    command.Parameters.Add(P("@barcode", "%" + escaped + "%"));
+                }
+                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime
+FROM ScanRecord WHERE " + string.Join(" AND ", conditions) + " ORDER BY Id DESC LIMIT @limit";
+                command.Parameters.Add(P("@limit", Math.Max(1, limit)));
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read()) result.Add(new ScanRecord
+                    {
+                        Id = reader.GetInt64(0), StationNo = reader.GetInt32(1), StationName = AsString(reader, 2),
+                        Barcode = AsString(reader, 3), ProductName = AsString(reader, 4), AirtightString = AsString(reader, 5),
+                        Status = reader.GetInt32(6), RecordTime = AsTime(reader, 7),
+                        DetectTime = reader.IsDBNull(8) ? (DateTime?)null : AsTime(reader, 8)
+                    });
+            }
+            return result;
+        }
+
         private void Execute(string sql, params SqliteParameter[] parameters)
         {
             using (var connection = Open())

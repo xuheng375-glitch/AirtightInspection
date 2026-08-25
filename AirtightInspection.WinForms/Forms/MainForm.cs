@@ -23,7 +23,7 @@ namespace AirtightInspection.Forms
         private readonly PendingRecordService _pending; private readonly ModbusService _modbus;
         private readonly ScannerService _scanner; private readonly InspectionService _inspection;
         private readonly ComboBox _products; private readonly DataGridView _records, _pendingGrid;
-        private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _focusHint, _pendingStatus, _clockStatus;
+        private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _productStatus, _focusHint, _pendingStatus, _clockStatus;
         private readonly StringBuilder _keyboardBuffer = new StringBuilder();
         private readonly Timer _keyboardFinalizeTimer;
         private List<StationConfig> _enabledStations = new List<StationConfig>();
@@ -76,7 +76,8 @@ namespace AirtightInspection.Forms
             navigation.Controls.Add(NavigationButton("01  工位配置", OpenStations));
             navigation.Controls.Add(NavigationButton("02  产品配置", OpenProducts));
             navigation.Controls.Add(NavigationButton("03  作业指导书", OpenManual));
-            navigation.Controls.Add(NavigationButton("04  导出检测记录", ExportCsv));
+            navigation.Controls.Add(NavigationButton("04  数据查询", OpenRecordQuery));
+            navigation.Controls.Add(NavigationButton("05  导出检测记录", ExportCsv));
             sidebar.Controls.Add(navigation, 0, 1);
 
             var sidebarFooter = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(14, 23, 30) };
@@ -86,20 +87,22 @@ namespace AirtightInspection.Forms
             sidebarFooter.Controls.Add(versionLabel); sidebarFooter.Controls.Add(dateLabel); sidebarFooter.Controls.Add(_clockStatus); sidebar.Controls.Add(sidebarFooter, 0, 2);
 
             // 顶部设备状态卡
-            var statusGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = IndustrialTheme.Background, Padding = new Padding(2) };
-            for (var i = 0; i < 3; i++) statusGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+            var statusGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, BackColor = IndustrialTheme.Background, Padding = new Padding(2) };
+            for (var i = 0; i < 4; i++) statusGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
             _plcStatus = StatusValue("离线", IndustrialTheme.Danger);
             _stationStatus = StatusValue("--", IndustrialTheme.Text);
+            _productStatus = StatusValue("未选择", IndustrialTheme.Text);
             _pendingStatus = StatusValue("00", IndustrialTheme.Text);
             statusGrid.Controls.Add(StatusCard("控制器连接状态", _plcStatus, IndustrialTheme.Danger), 0, 0);
             statusGrid.Controls.Add(StatusCard("PLC当前的工位号", _stationStatus, IndustrialTheme.Accent), 1, 0);
-            statusGrid.Controls.Add(StatusCard("待检测记录数量", _pendingStatus, IndustrialTheme.Success), 2, 0);
+            statusGrid.Controls.Add(StatusCard("当前产品名称", _productStatus, IndustrialTheme.Warning), 2, 0);
+            statusGrid.Controls.Add(StatusCard("待检测记录数量", _pendingStatus, IndustrialTheme.Success), 3, 0);
             statusGrid.MouseDown += drag;
 
             // 产品与窗口命令区
             var productBar = new Panel { Dock = DockStyle.Fill, BackColor = IndustrialTheme.Panel, Padding = new Padding(10, 7, 8, 6) };
             var productCommands = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, BackColor = IndustrialTheme.Panel, Padding = new Padding(2, 1, 0, 0) };
-            var productCaption = UiFactory.Label("当前生产产品"); productCaption.ForeColor = IndustrialTheme.Accent; productCaption.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+            var productCaption = UiFactory.Label("切换生产产品"); productCaption.ForeColor = IndustrialTheme.Accent; productCaption.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
             _products = new ComboBox { Width = 420, Height = 38, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(12, 0, 18, 0), Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold) };
             _focusHint = UiFactory.Label(_scanner.IsKeyboardMode ? "● 请点击本窗口后扫码" : "● 串口扫码枪已启用"); _focusHint.ForeColor = IndustrialTheme.Warning;
             productCommands.Controls.AddRange(new Control[] { productCaption, _products, _focusHint });
@@ -147,6 +150,7 @@ namespace AirtightInspection.Forms
                 RefreshRecords();
                 SetScanHint("● 上位机已入库", IndustrialTheme.Success);
             });
+            _products.SelectedIndexChanged += (_, __) => UpdateProductStatus();
             KeyPress += OnKeyPress; Shown += OnShown; FormClosing += OnClosing;
         }
 
@@ -339,6 +343,10 @@ namespace AirtightInspection.Forms
             using (var form = new ProductConfigForm(_database, _config)) form.ShowDialog(this);
             RefreshProducts(selected);
         }
+        private void OpenRecordQuery(object sender, EventArgs e)
+        {
+            using (var form = new RecordQueryForm(_database)) form.ShowDialog(this);
+        }
         private async void ExportCsv(object sender, EventArgs e)
         {
             using (var dialog = new SaveFileDialog { Filter = "CSV 文件|*.csv", FileName = "检测记录_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv" })
@@ -352,6 +360,15 @@ namespace AirtightInspection.Forms
         {
             var products = _database.GetProducts(); _products.DataSource = products;
             if (!string.IsNullOrEmpty(selectName)) for (var i = 0; i < products.Count; i++) if (products[i].ProductName == selectName) { _products.SelectedIndex = i; break; }
+            UpdateProductStatus();
+        }
+        private void UpdateProductStatus()
+        {
+            var product = _products.SelectedItem as ProductConfig;
+            _productStatus.Text = product?.ProductName ?? "未选择";
+            _productStatus.ForeColor = product == null ? IndustrialTheme.Danger : IndustrialTheme.Warning;
+            var card = _productStatus.Parent as IndustrialCard;
+            if (card != null) { card.AccentColor = _productStatus.ForeColor; card.Invalidate(); }
         }
         private void RefreshStations() => _enabledStations = _database.GetStations(true);
 
