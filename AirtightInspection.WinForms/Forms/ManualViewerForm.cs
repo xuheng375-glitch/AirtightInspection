@@ -19,7 +19,7 @@ namespace AirtightInspection.Forms
         private readonly Label _page;
         private readonly Label _zoomLabel;
         private readonly Button _previous, _next, _zoomIn, _zoomOut, _fit;
-        private int _index; private int _zoom = 100; private Image _current;
+        private int _index; private double _scale = 1D; private Image _current;
         private bool _fitMode = true;
         private bool _dragging; private Point _dragStart; private Point _scrollStart;
         [DllImport("user32.dll")] private static extern bool ReleaseCapture();
@@ -34,8 +34,8 @@ namespace AirtightInspection.Forms
             var toolbar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 50, Padding = new Padding(7), BackColor = IndustrialTheme.Panel };
             _previous = UiFactory.Button("上一张", (_, __) => { _index--; ShowImage(); });
             _next = UiFactory.Button("下一张", (_, __) => { _index++; ShowImage(); });
-            _zoomOut = UiFactory.Button("缩小", (_, __) => { _fitMode = false; _zoom -= 10; ApplyZoom(); });
-            _zoomIn = UiFactory.Button("放大", (_, __) => { _fitMode = false; _zoom += 10; ApplyZoom(); });
+            _zoomOut = UiFactory.Button("缩小", (_, __) => { _fitMode = false; _scale *= 0.8D; ApplyZoom(); });
+            _zoomIn = UiFactory.Button("放大", (_, __) => { _fitMode = false; _scale *= 1.25D; ApplyZoom(); });
             _fit = UiFactory.Button("适应窗口", (_, __) => { _fitMode = true; FitToViewport(); });
             _page = UiFactory.Label(""); _zoomLabel = UiFactory.Label("");
             var heading = UiFactory.Label("◆ 作业指导书 / " + product); heading.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold); heading.ForeColor = IndustrialTheme.Accent;
@@ -81,8 +81,11 @@ namespace AirtightInspection.Forms
         }
         private void ApplyZoom()
         {
-            if (_current == null) return; _zoom = Math.Max(1, Math.Min(300, _zoom));
-            _picture.Size = new Size(Math.Max(1, _current.Width * _zoom / 100), Math.Max(1, _current.Height * _zoom / 100));
+            if (_current == null) return;
+            _scale = Math.Max(0.0001D, Math.Min(3D, _scale));
+            _picture.Size = new Size(
+                Math.Max(1, (int)Math.Round(_current.Width * _scale)),
+                Math.Max(1, (int)Math.Round(_current.Height * _scale)));
             _picture.Location = new Point(Math.Max(0, (_viewport.ClientSize.Width - _picture.Width) / 2), Math.Max(0, (_viewport.ClientSize.Height - _picture.Height) / 2));
             UpdateButtons();
         }
@@ -91,15 +94,15 @@ namespace AirtightInspection.Forms
             if (_current == null) return;
             var availableWidth = Math.Max(1, _viewport.ClientSize.Width - 24);
             var availableHeight = Math.Max(1, _viewport.ClientSize.Height - 24);
-            var scale = Math.Min((double)availableWidth / _current.Width, (double)availableHeight / _current.Height);
-            _zoom = Math.Max(1, Math.Min(300, (int)Math.Floor(scale * 100)));
+            _viewport.AutoScrollPosition = Point.Empty;
+            _scale = Math.Min((double)availableWidth / _current.Width, (double)availableHeight / _current.Height);
             ApplyZoom();
         }
         private void UpdateButtons()
         {
             _previous.Enabled = _images.Count > 0 && _index > 0; _next.Enabled = _images.Count > 0 && _index < _images.Count - 1;
-            _zoomOut.Enabled = _current != null && _zoom > 1; _zoomIn.Enabled = _current != null && _zoom < 300; _fit.Enabled = _current != null;
-            if (_images.Count > 0) _page.Text = $"第 {_index + 1} / {_images.Count} 页"; _zoomLabel.Text = $"缩放 {_zoom}%";
+            _zoomOut.Enabled = _current != null && _scale > 0.0001D; _zoomIn.Enabled = _current != null && _scale < 3D; _fit.Enabled = _current != null;
+            if (_images.Count > 0) _page.Text = $"第 {_index + 1} / {_images.Count} 页"; _zoomLabel.Text = $"缩放 {_scale * 100:0.##}%";
         }
         private void DisposeCurrent() { _picture.Image = null; _current?.Dispose(); _current = null; }
     }
