@@ -66,6 +66,7 @@ namespace AirtightInspection.Forms
             if (_current == null)
             {
                 _picture.Image = null; _picture.Size = _viewport.ClientSize;
+                _picture.Paint -= DrawEmpty;
                 _picture.Paint += DrawEmpty; _page.Text = "未找到该产品的作业指导书图片";
             }
             else { _picture.Paint -= DrawEmpty; _picture.Image = _current; _zoom = 100; ApplyZoom(); }

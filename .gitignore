@@ -9,9 +9,14 @@ publish/
 *.zip
 
 # Runtime data (never commit production records)
-**/Data/
-**/Logs/
-**/ProductManual/
+# Runtime folders only. Do not ignore source folders such as
+# AirtightInspection.WinForms/Data.
+**/bin/**/Data/
+**/bin/**/Logs/
+**/bin/**/ProductManual/
+/Data/
+/Logs/
+/ProductManual/
 *.db
 *.db-shm
 *.db-wal

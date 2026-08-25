@@ -141,7 +141,12 @@ namespace AirtightInspection.Forms
             _modbus.StationChanged += (_, station) => SafeUi(() => _stationStatus.Text = station.ToString("00"));
             _modbus.Message += (_, text) => AddLog(text); _scanner.Message += (_, text) => AddLog(text);
             _scanner.BarcodeReceived += (_, barcode) => SafeUi(() => HandleBarcode(barcode));
-            _inspection.Message += (_, text) => AddLog(text); _inspection.RecordsChanged += (_, __) => SafeUi(RefreshRecords);
+            _inspection.Message += (_, text) => AddLog(text);
+            _inspection.RecordsChanged += (_, __) => SafeUi(() =>
+            {
+                RefreshRecords();
+                SetScanHint("● 上位机已入库", IndustrialTheme.Success);
+            });
             KeyPress += OnKeyPress; Shown += OnShown; FormClosing += OnClosing;
         }
 
@@ -269,6 +274,13 @@ namespace AirtightInspection.Forms
         private void HandleBarcode(string barcode)
         {
             SetScanHint($"● 已检测到扫码枪输入（{barcode.Length} 字符）", IndustrialTheme.Success);
+            var product = _products.SelectedItem as ProductConfig;
+            if (product == null)
+            {
+                SetScanHint("● 扫码未入队：请先选择生产产品", IndustrialTheme.Danger);
+                IndustrialMessageBox.Show(this, "请先配置并选择当前生产产品。", "扫码未入队", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             if (_enabledStations.Count == 0) RefreshStations();
             if (_enabledStations.Count == 0)
             {
@@ -291,11 +303,10 @@ namespace AirtightInspection.Forms
                     SetScanHint("● 已取消覆盖，扫码未进入待检测队列", IndustrialTheme.Warning);
                     return;
                 }
-                var product = _products.SelectedItem as ProductConfig;
                 _pending.AddOrReplace(new PendingRecord { StationNo = station.StationNo, StationName = station.StationName,
-                    Barcode = barcode, ProductName = product?.ProductName ?? string.Empty, ScanTime = DateTime.Now });
+                    Barcode = barcode, ProductName = product.ProductName, ScanTime = DateTime.Now });
                 SetScanHint($"● 已进入待检测队列 · 工位 {station.StationNo:00}", IndustrialTheme.Success);
-                Log.Info("扫码 {0} 已分配到工位 {1}，产品 {2}", barcode, station.StationNo, product?.ProductName ?? string.Empty);
+                Log.Info("扫码 {0} 已分配到工位 {1}，产品 {2}", barcode, station.StationNo, product.ProductName);
                 AddLog($"扫码 {barcode} 已分配到工位 {station.StationNo}");
             }
         }

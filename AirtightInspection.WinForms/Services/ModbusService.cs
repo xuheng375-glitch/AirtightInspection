@@ -99,7 +99,11 @@ namespace AirtightInspection.Services
                 catch (Exception ex)
                 {
                     Log.Error(ex, "PLC 轮询失败"); RaiseMessage("PLC 通信异常：" + ex.Message);
-                    Disconnect(); previousFlag = null;
+                    // Keep the last flag across reconnects. If communication is lost
+                    // while D4000 is still 1, treating the first reconnect read as a
+                    // new edge can process the same PLC result twice or overwrite a
+                    // successful acknowledgement with failure value 3.
+                    Disconnect();
                     try { await Task.Delay(_config.ReconnectIntervalMs, token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
