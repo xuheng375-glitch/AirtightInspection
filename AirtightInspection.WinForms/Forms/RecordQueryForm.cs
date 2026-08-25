@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AirtightInspection.Data;
@@ -15,8 +16,8 @@ namespace AirtightInspection.Forms
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly Database _database;
-        private readonly DateTimePicker _startDate;
-        private readonly DateTimePicker _endDate;
+        private readonly TextBox _startDate;
+        private readonly TextBox _endDate;
         private readonly ComboBox _station;
         private readonly ComboBox _product;
         private readonly TextBox _barcode;
@@ -66,8 +67,8 @@ namespace AirtightInspection.Forms
                 WrapContents = false,
                 BackColor = IndustrialTheme.Surface
             };
-            _startDate = DatePicker(DateTime.Today.AddDays(-7));
-            _endDate = DatePicker(DateTime.Today);
+            _startDate = DateInput(DateTime.Today.AddDays(-7));
+            _endDate = DateInput(DateTime.Today);
             _station = new ComboBox { Width = 150, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(5, 4, 14, 0) };
             _product = new ComboBox { Width = 190, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(5, 4, 14, 0) };
             _barcode = new TextBox { Width = 230, Margin = new Padding(5, 4, 10, 0), MaxLength = 200 };
@@ -98,12 +99,12 @@ namespace AirtightInspection.Forms
             };
         }
 
-        private static DateTimePicker DatePicker(DateTime value) => new DateTimePicker
+        private static TextBox DateInput(DateTime value) => new TextBox
         {
-            Value = value,
+            Text = value.ToString("yyyy-MM-dd"),
             Width = 130,
-            Format = DateTimePickerFormat.Custom,
-            CustomFormat = "yyyy-MM-dd",
+            MaxLength = 10,
+            TextAlign = HorizontalAlignment.Center,
             Margin = new Padding(5, 4, 14, 0)
         };
 
@@ -153,7 +154,15 @@ namespace AirtightInspection.Forms
 
         private async void Query(object sender, EventArgs e)
         {
-            if (_startDate.Value.Date > _endDate.Value.Date)
+            DateTime start;
+            DateTime end;
+            if (!DateTime.TryParseExact(_startDate.Text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out start) ||
+                !DateTime.TryParseExact(_endDate.Text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out end))
+            {
+                IndustrialMessageBox.Show(this, "日期格式必须为 yyyy-MM-dd，例如 2026-08-25。", "查询条件错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (start > end)
             {
                 IndustrialMessageBox.Show(this, "开始日期不能晚于结束日期。", "查询条件错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -162,8 +171,7 @@ namespace AirtightInspection.Forms
             _countLabel.Text = "正在查询...";
             try
             {
-                var start = _startDate.Value.Date;
-                var endExclusive = _endDate.Value.Date.AddDays(1);
+                var endExclusive = end.AddDays(1);
                 var stationNo = (_station.SelectedItem as StationConfig)?.StationNo;
                 var productName = (_product.SelectedItem as ProductConfig)?.ProductName;
                 var barcode = _barcode.Text;
@@ -183,8 +191,8 @@ namespace AirtightInspection.Forms
 
         private void ResetFilters(bool query)
         {
-            _startDate.Value = DateTime.Today.AddDays(-7);
-            _endDate.Value = DateTime.Today;
+            _startDate.Text = DateTime.Today.AddDays(-7).ToString("yyyy-MM-dd");
+            _endDate.Text = DateTime.Today.ToString("yyyy-MM-dd");
             if (_station.Items.Count > 0) _station.SelectedIndex = 0;
             if (_product.Items.Count > 0) _product.SelectedIndex = 0;
             _barcode.Clear();

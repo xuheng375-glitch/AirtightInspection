@@ -6,6 +6,22 @@ using Sunny.UI;
 
 namespace AirtightInspection.Forms
 {
+    internal sealed class IndustrialGroupBox : GroupBox
+    {
+        public IndustrialGroupBox() { DoubleBuffered = true; }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(BackColor);
+            var textSize = TextRenderer.MeasureText(Text, Font);
+            var borderTop = Math.Max(8, textSize.Height / 2);
+            using (var border = new Pen(Color.FromArgb(56, 79, 92)))
+                e.Graphics.DrawRectangle(border, 0, borderTop, Width - 1, Height - borderTop - 1);
+            var titleBounds = new Rectangle(10, 0, textSize.Width + 8, textSize.Height);
+            using (var background = new SolidBrush(BackColor)) e.Graphics.FillRectangle(background, titleBounds);
+            TextRenderer.DrawText(e.Graphics, Text, Font, new Point(14, 0), ForeColor, TextFormatFlags.NoPadding);
+        }
+    }
+
     internal sealed class IndustrialCard : Panel
     {
         public Color AccentColor { get; set; } = IndustrialTheme.Accent;
@@ -93,6 +109,13 @@ namespace AirtightInspection.Forms
             grid.DefaultCellStyle.SelectionBackColor = AccentDark;
             grid.DefaultCellStyle.SelectionForeColor = Color.White;
             grid.AlternatingRowsDefaultCellStyle.BackColor = Surface;
+            foreach (DataGridViewColumn column in grid.Columns)
+                if (column is DataGridViewCheckBoxColumn checkColumn)
+                {
+                    checkColumn.FlatStyle = FlatStyle.Flat;
+                    checkColumn.DefaultCellStyle.BackColor = Panel;
+                    checkColumn.DefaultCellStyle.SelectionBackColor = AccentDark;
+                }
         }
 
         public static void StyleButton(Button button, bool danger = false)
@@ -116,19 +139,30 @@ namespace AirtightInspection.Forms
                 else if (control is TextBoxBase)
                 {
                     control.BackColor = Color.FromArgb(9, 16, 22); control.ForeColor = Text;
+                    if (control is TextBox textBox) textBox.BorderStyle = BorderStyle.FixedSingle;
                 }
-                else if (control is ComboBox || control is NumericUpDown)
+                else if (control is ComboBox combo)
                 {
-                    control.BackColor = Color.FromArgb(9, 16, 22); control.ForeColor = Text;
+                    StyleComboBox(combo);
                 }
-                else if (control is DateTimePicker picker)
+                else if (control is NumericUpDown numeric)
                 {
-                    picker.BackColor = Color.FromArgb(9, 16, 22);
-                    picker.ForeColor = Text;
-                    picker.CalendarMonthBackground = Panel;
-                    picker.CalendarForeColor = Text;
-                    picker.CalendarTitleBackColor = Header;
-                    picker.CalendarTitleForeColor = Accent;
+                    numeric.BackColor = Color.FromArgb(9, 16, 22); numeric.ForeColor = Text;
+                    numeric.BorderStyle = BorderStyle.FixedSingle;
+                    if (numeric.Controls.Count > 0)
+                    {
+                        numeric.Controls[0].BackColor = Surface;
+                        numeric.Controls[0].ForeColor = Text;
+                    }
+                }
+                else if (control is CheckBox checkBox)
+                {
+                    checkBox.BackColor = Color.Transparent;
+                    checkBox.ForeColor = Text;
+                    checkBox.FlatStyle = FlatStyle.Flat;
+                    checkBox.FlatAppearance.BorderColor = AccentDark;
+                    checkBox.FlatAppearance.CheckedBackColor = AccentDark;
+                    checkBox.FlatAppearance.MouseOverBackColor = Surface;
                 }
                 else if (control is GroupBox)
                 {
@@ -143,6 +177,7 @@ namespace AirtightInspection.Forms
                 else if (control is ListBox)
                 {
                     control.BackColor = Color.FromArgb(8, 14, 20); control.ForeColor = Color.FromArgb(159, 219, 230);
+                    ((ListBox)control).BorderStyle = BorderStyle.None;
                 }
                 else if (control is Panel || control is FlowLayoutPanel || control is TableLayoutPanel)
                 {
@@ -153,6 +188,33 @@ namespace AirtightInspection.Forms
                 }
                 if (control.HasChildren) ApplyControl(control);
             }
+        }
+
+        private static void StyleComboBox(ComboBox combo)
+        {
+            combo.BackColor = Color.FromArgb(9, 16, 22);
+            combo.ForeColor = Text;
+            combo.FlatStyle = FlatStyle.Flat;
+            combo.DrawMode = DrawMode.OwnerDrawFixed;
+            combo.ItemHeight = Math.Max(24, combo.Font.Height + 9);
+            combo.IntegralHeight = false;
+            combo.DropDownHeight = 260;
+            combo.DrawItem -= DrawComboItem;
+            combo.DrawItem += DrawComboItem;
+        }
+
+        private static void DrawComboItem(object sender, DrawItemEventArgs e)
+        {
+            var combo = (ComboBox)sender;
+            var selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            using (var background = new SolidBrush(selected ? AccentDark : Color.FromArgb(9, 16, 22)))
+                e.Graphics.FillRectangle(background, e.Bounds);
+            var text = e.Index >= 0 && e.Index < combo.Items.Count
+                ? Convert.ToString(combo.Items[e.Index])
+                : combo.Text;
+            TextRenderer.DrawText(e.Graphics, text ?? string.Empty, combo.Font,
+                new Rectangle(e.Bounds.X + 7, e.Bounds.Y, Math.Max(0, e.Bounds.Width - 10), e.Bounds.Height),
+                selected ? Color.White : Text, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         }
     }
 }

@@ -178,7 +178,7 @@ namespace AirtightInspection.Forms
 
         private static Control WrapWithTitle(string title, Control content)
         {
-            var group = new GroupBox { Text = "  " + title.ToUpperInvariant() + "  ", Dock = DockStyle.Fill, Padding = new Padding(8),
+            var group = new IndustrialGroupBox { Text = "  " + title.ToUpperInvariant() + "  ", Dock = DockStyle.Fill, Padding = new Padding(8),
                 BackColor = IndustrialTheme.Panel, ForeColor = IndustrialTheme.Accent }; group.Controls.Add(content); return group;
         }
         private static DataGridView BaseGrid() => new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
