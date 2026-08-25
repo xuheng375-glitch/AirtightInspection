@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -25,6 +26,7 @@ namespace AirtightInspection.Forms
         private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _focusHint, _pendingStatus, _clockStatus;
         private readonly StringBuilder _keyboardBuffer = new StringBuilder();
         private readonly Timer _keyboardFinalizeTimer;
+        private List<StationConfig> _enabledStations = new List<StationConfig>();
         private DateTime _lastKeyTime;
 
         [DllImport("user32.dll")] private static extern bool ReleaseCapture();
@@ -37,7 +39,7 @@ namespace AirtightInspection.Forms
             _inspection = new InspectionService(database, _pending, _modbus);
             _keyboardFinalizeTimer = new Timer
             {
-                Interval = Math.Min(1000, Math.Max(250, config.KeyboardCharTimeoutMs * 3))
+                Interval = Math.Min(300, Math.Max(120, config.KeyboardCharTimeoutMs + 50))
             };
             _keyboardFinalizeTimer.Tick += (_, __) =>
             {
@@ -195,7 +197,8 @@ namespace AirtightInspection.Forms
 
         private void OnShown(object sender, EventArgs e)
         {
-            RefreshProducts(); RefreshRecords(); RefreshPending(); _scanner.Start(); _modbus.Start();
+            SwitchToEnglishInputLanguage();
+            RefreshProducts(); RefreshStations(); RefreshRecords(); RefreshPending(); _scanner.Start(); _modbus.Start();
             var timer = new Timer { Interval = 1000 }; timer.Tick += (_, __) => { _clockStatus.Text = DateTime.Now.ToString("HH:mm:ss"); CheckTimeouts(); }; timer.Start(); Tag = timer;
             AddLog("系统启动完成"); Activate();
         }
@@ -250,9 +253,13 @@ namespace AirtightInspection.Forms
         }
         private void HandleBarcode(string barcode)
         {
-            var stations = _database.GetStations(true); if (stations.Count == 0) { MessageBox.Show("没有启用中的工位，请先配置工位"); return; }
-            using (var dialog = new ScanStationForm(barcode, stations))
+            if (_enabledStations.Count == 0) RefreshStations();
+            if (_enabledStations.Count == 0) { MessageBox.Show("没有启用中的工位，请先配置工位"); return; }
+            var preparation = Stopwatch.StartNew();
+            using (var dialog = new ScanStationForm(barcode, _enabledStations))
             {
+                preparation.Stop();
+                Log.Info("工位选择窗口准备耗时：{0} ms", preparation.ElapsedMilliseconds);
                 if (dialog.ShowDialog(this) != DialogResult.OK || dialog.SelectedStation == null) return;
                 PendingRecord old; var station = dialog.SelectedStation;
                 if (_pending.TryGet(station.StationNo, out old) && MessageBox.Show($"该工位已有待检测条码 [{old.Barcode}]，是否用新条码 [{barcode}] 覆盖？", "覆盖确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
@@ -277,6 +284,7 @@ namespace AirtightInspection.Forms
         private void OpenStations(object sender, EventArgs e)
         {
             using (var form = new StationConfigForm(_database, _config)) form.ShowDialog(this);
+            RefreshStations();
         }
         private void OpenProducts(object sender, EventArgs e)
         {
@@ -297,6 +305,17 @@ namespace AirtightInspection.Forms
         {
             var products = _database.GetProducts(); _products.DataSource = products;
             if (!string.IsNullOrEmpty(selectName)) for (var i = 0; i < products.Count; i++) if (products[i].ProductName == selectName) { _products.SelectedIndex = i; break; }
+        }
+        private void RefreshStations() => _enabledStations = _database.GetStations(true);
+
+        private static void SwitchToEnglishInputLanguage()
+        {
+            foreach (InputLanguage language in InputLanguage.InstalledInputLanguages)
+            {
+                if (!language.Culture.TwoLetterISOLanguageName.Equals("en", StringComparison.OrdinalIgnoreCase)) continue;
+                InputLanguage.CurrentInputLanguage = language;
+                break;
+            }
         }
         private void RefreshRecords() { _records.DataSource = _database.GetRecords(_config.DisplayRecordLimit); }
         private void RefreshPending()
