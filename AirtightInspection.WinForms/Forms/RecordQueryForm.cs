@@ -94,6 +94,7 @@ namespace AirtightInspection.Forms
             Controls.Add(toolbar);
             AcceptButton = _queryButton;
             IndustrialTheme.Apply(this);
+            _grid.AlternatingRowsDefaultCellStyle.BackColor = IndustrialTheme.Panel;
             heading.ForeColor = IndustrialTheme.Accent;
             Load += (_, __) =>
             {
