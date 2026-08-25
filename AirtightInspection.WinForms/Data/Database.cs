@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS ProductConfig (
  CreateTime TEXT
 );
 CREATE INDEX IF NOT EXISTS IX_ScanRecord_RecordTime ON ScanRecord(RecordTime DESC);
+CREATE INDEX IF NOT EXISTS IX_ScanRecord_DetectTime ON ScanRecord(DetectTime DESC);
 CREATE INDEX IF NOT EXISTS IX_ScanRecord_StationNo ON ScanRecord(StationNo);";
                 command.ExecuteNonQuery();
             }
@@ -162,6 +163,42 @@ FROM ScanRecord ORDER BY Id DESC" + (limit > 0 ? " LIMIT @limit" : string.Empty)
             return result;
         }
 
+        public IEnumerable<ScanRecord> EnumerateRecords()
+        {
+            using (var connection = Open())
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime
+FROM ScanRecord ORDER BY Id DESC";
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read())
+                        yield return ReadRecord(reader);
+            }
+        }
+
+        public string CheckIntegrity()
+        {
+            using (var connection = Open())
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "PRAGMA integrity_check;";
+                var result = Convert.ToString(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+                return string.IsNullOrWhiteSpace(result) ? "unknown" : result;
+            }
+        }
+
+        public void BackupTo(string backupPath)
+        {
+            var directory = Path.GetDirectoryName(backupPath);
+            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+            using (var source = Open())
+            using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = backupPath }.ToString()))
+            {
+                destination.Open();
+                source.BackupDatabase(destination);
+            }
+        }
+
         public List<ScanRecord> QueryRecords(DateTime startTime, DateTime endTimeExclusive,
             int? stationNo, string productName, string barcodeKeyword, int limit = 5000)
         {
@@ -196,16 +233,23 @@ FROM ScanRecord ORDER BY Id DESC" + (limit > 0 ? " LIMIT @limit" : string.Empty)
 FROM ScanRecord WHERE " + string.Join(" AND ", conditions) + " ORDER BY Id DESC LIMIT @limit";
                 command.Parameters.Add(P("@limit", Math.Max(1, limit)));
                 using (var reader = command.ExecuteReader())
-                    while (reader.Read()) result.Add(new ScanRecord
-                    {
-                        Id = reader.GetInt64(0), StationNo = reader.GetInt32(1), StationName = AsString(reader, 2),
-                        Barcode = AsString(reader, 3), ProductName = AsString(reader, 4), AirtightString = AsString(reader, 5),
-                        Status = reader.GetInt32(6), RecordTime = AsTime(reader, 7),
-                        DetectTime = reader.IsDBNull(8) ? (DateTime?)null : AsTime(reader, 8)
-                    });
+                    while (reader.Read()) result.Add(ReadRecord(reader));
             }
             return result;
         }
+
+        private static ScanRecord ReadRecord(IDataRecord reader) => new ScanRecord
+        {
+            Id = reader.GetInt64(0),
+            StationNo = reader.GetInt32(1),
+            StationName = AsString(reader, 2),
+            Barcode = AsString(reader, 3),
+            ProductName = AsString(reader, 4),
+            AirtightString = AsString(reader, 5),
+            Status = reader.GetInt32(6),
+            RecordTime = AsTime(reader, 7),
+            DetectTime = reader.IsDBNull(8) ? (DateTime?)null : AsTime(reader, 8)
+        };
 
         private void Execute(string sql, params SqliteParameter[] parameters)
         {

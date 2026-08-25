@@ -36,6 +36,13 @@ namespace AirtightInspection.Config
         public string StringEncoding => _ini.Get("Register", "StringEncoding", "ASCII");
         public int StringHeaderBytes => Math.Max(0, _ini.GetInt("Register", "StringHeaderBytes", 0));
         public string DatabasePath => Resolve(_ini.Get("Database", "FilePath", @"Data\mydb.db"));
+        public bool EnableAutoBackup => _ini.GetBool("Database", "EnableAutoBackup", true);
+        public string DatabaseBackupFolder => Resolve(_ini.Get("Database", "BackupFolder", @"Data\Backups"));
+        public int DatabaseBackupIntervalHours => Math.Max(1, _ini.GetInt("Database", "BackupIntervalHours", 24));
+        public int DatabaseBackupRetentionDays => Math.Max(1, _ini.GetInt("Database", "BackupRetentionDays", 7));
+        public bool EnableIntegrityCheck => _ini.GetBool("Database", "EnableIntegrityCheck", true);
+        public int IntegrityCheckIntervalHours => Math.Max(1, _ini.GetInt("Database", "IntegrityCheckIntervalHours", 24));
+        public int MinimumFreeSpaceMb => Math.Max(256, _ini.GetInt("Database", "MinimumFreeSpaceMB", 10240));
         public string ScannerMode => _ini.Get("Scanner", "Mode", "Keyboard");
         public string ScannerPort => _ini.Get("Scanner", "PortName", "COM3");
         public int ScannerBaudRate => _ini.GetInt("Scanner", "BaudRate", 9600);

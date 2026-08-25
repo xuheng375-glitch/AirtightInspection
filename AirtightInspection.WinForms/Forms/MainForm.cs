@@ -21,7 +21,7 @@ namespace AirtightInspection.Forms
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly AppConfig _config; private readonly Database _database;
         private readonly PendingRecordService _pending; private readonly ModbusService _modbus;
-        private readonly ScannerService _scanner; private readonly InspectionService _inspection;
+        private readonly ScannerService _scanner; private readonly InspectionService _inspection; private readonly DatabaseMaintenanceService _maintenance;
         private readonly ComboBox _products; private readonly IndustrialCard _productCard; private readonly DataGridView _records, _pendingGrid;
         private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _focusHint, _pendingStatus, _clockStatus;
         private readonly StringBuilder _keyboardBuffer = new StringBuilder();
@@ -37,6 +37,7 @@ namespace AirtightInspection.Forms
             _config = config; _database = database; _pending = new PendingRecordService();
             _modbus = new ModbusService(config); _scanner = new ScannerService(config);
             _inspection = new InspectionService(database, _pending, _modbus);
+            _maintenance = new DatabaseMaintenanceService(config, database);
             _keyboardFinalizeTimer = new Timer
             {
                 Interval = Math.Min(800, Math.Max(350, config.KeyboardCharTimeoutMs * 4))
@@ -145,6 +146,12 @@ namespace AirtightInspection.Forms
             _modbus.Message += (_, text) => AddLog(text); _scanner.Message += (_, text) => AddLog(text);
             _scanner.BarcodeReceived += (_, barcode) => SafeUi(() => HandleBarcode(barcode));
             _inspection.Message += (_, text) => AddLog(text);
+            _maintenance.Message += (_, text) => AddLog(text);
+            _maintenance.Warning += (_, text) => SafeUi(() =>
+            {
+                AddLog(text);
+                IndustrialMessageBox.Show(this, text, "数据库维护告警", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            });
             _inspection.RecordsChanged += (_, __) => SafeUi(() =>
             {
                 RefreshRecords();
@@ -228,7 +235,7 @@ namespace AirtightInspection.Forms
         private void OnShown(object sender, EventArgs e)
         {
             SwitchToEnglishInputLanguage();
-            RefreshProducts(); RefreshStations(); RefreshRecords(); RefreshPending(); _scanner.Start(); _modbus.Start();
+            RefreshProducts(); RefreshStations(); RefreshRecords(); RefreshPending(); _scanner.Start(); _modbus.Start(); _maintenance.Start();
             var timer = new Timer { Interval = 1000 }; timer.Tick += (_, __) => { _clockStatus.Text = DateTime.Now.ToString("HH:mm:ss"); CheckTimeouts(); }; timer.Start(); Tag = timer;
             AddLog("系统启动完成"); Activate();
         }
@@ -237,6 +244,7 @@ namespace AirtightInspection.Forms
             if (_pending.Snapshot().Count > 0 && IndustrialMessageBox.Show(this, "仍有待检测记录，退出后这些内存数据将丢失。确认退出？", "退出确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { e.Cancel = true; return; }
             (Tag as Timer)?.Stop();
             _keyboardFinalizeTimer.Stop(); _keyboardFinalizeTimer.Dispose();
+            _maintenance.Dispose();
             _scanner.Dispose(); _modbus.Dispose();
         }
 
@@ -373,7 +381,7 @@ namespace AirtightInspection.Forms
             using (var dialog = new SaveFileDialog { Filter = "CSV 文件|*.csv", FileName = "检测记录_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv" })
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                try { AddLog("正在导出 CSV..."); var records = await Task.Run(() => _database.GetRecords()); await CsvExportService.ExportAsync(dialog.FileName, records); AddLog("CSV 导出成功：" + dialog.FileName); IndustrialMessageBox.Show(this, "检测记录已成功导出。", "导出完成", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                try { AddLog("正在流式导出 CSV..."); await CsvExportService.ExportAsync(dialog.FileName, _database.EnumerateRecords()); AddLog("CSV 导出成功：" + dialog.FileName); IndustrialMessageBox.Show(this, "检测记录已成功导出。", "导出完成", MessageBoxButtons.OK, MessageBoxIcon.Information); }
                 catch (Exception ex) { Log.Error(ex, "CSV 导出失败"); AddLog("CSV 导出失败：" + ex.Message); IndustrialMessageBox.Show(this, "导出失败：" + ex.Message, "导出失败", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             }
         }
