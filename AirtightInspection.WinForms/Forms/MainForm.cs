@@ -23,7 +23,9 @@ namespace AirtightInspection.Forms
         private readonly ScannerService _scanner; private readonly InspectionService _inspection;
         private readonly ComboBox _products; private readonly DataGridView _records, _pendingGrid;
         private readonly ListBox _logList; private readonly Label _plcStatus, _stationStatus, _focusHint, _pendingStatus, _clockStatus;
-        private readonly StringBuilder _keyboardBuffer = new StringBuilder(); private DateTime _lastKeyTime;
+        private readonly StringBuilder _keyboardBuffer = new StringBuilder();
+        private readonly Timer _keyboardFinalizeTimer;
+        private DateTime _lastKeyTime;
 
         [DllImport("user32.dll")] private static extern bool ReleaseCapture();
         [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
@@ -33,6 +35,15 @@ namespace AirtightInspection.Forms
             _config = config; _database = database; _pending = new PendingRecordService();
             _modbus = new ModbusService(config); _scanner = new ScannerService(config);
             _inspection = new InspectionService(database, _pending, _modbus);
+            _keyboardFinalizeTimer = new Timer
+            {
+                Interval = Math.Min(1000, Math.Max(250, config.KeyboardCharTimeoutMs * 3))
+            };
+            _keyboardFinalizeTimer.Tick += (_, __) =>
+            {
+                _keyboardFinalizeTimer.Stop();
+                if (_keyboardBuffer.Length >= 6) CompleteKeyboardBarcode();
+            };
             Text = "气密检测数据采集系统"; Width = 1380; Height = 850; StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.None; KeyPreview = true; MinimumSize = new Size(1100, 700); WindowState = FormWindowState.Maximized;
             IndustrialTheme.ApplyWindowIcon(this);
@@ -191,15 +202,51 @@ namespace AirtightInspection.Forms
         private void OnClosing(object sender, FormClosingEventArgs e)
         {
             if (_pending.Snapshot().Count > 0 && MessageBox.Show("仍有待检测记录，退出后这些内存数据将丢失。确认退出？", "退出确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { e.Cancel = true; return; }
-            (Tag as Timer)?.Stop(); _scanner.Dispose(); _modbus.Dispose();
+            (Tag as Timer)?.Stop();
+            _keyboardFinalizeTimer.Stop(); _keyboardFinalizeTimer.Dispose();
+            _scanner.Dispose(); _modbus.Dispose();
         }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            var keyCode = keyData & Keys.KeyCode;
+            if (CanCaptureKeyboardScan() && (keyCode == Keys.Enter || keyCode == Keys.Tab))
+            {
+                CompleteKeyboardBarcode();
+                return true;
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
         private void OnKeyPress(object sender, KeyPressEventArgs e)
         {
-            if (!_scanner.IsKeyboardMode || !ContainsFocus || Application.OpenForms.Count > 1) return;
+            if (!CanCaptureKeyboardScan()) return;
+            if (e.KeyChar == '\r' || e.KeyChar == '\n')
+            {
+                CompleteKeyboardBarcode(); e.Handled = true; return;
+            }
             if ((DateTime.Now - _lastKeyTime).TotalMilliseconds > _config.KeyboardCharTimeoutMs) _keyboardBuffer.Clear();
             _lastKeyTime = DateTime.Now;
-            if (e.KeyChar == '\r') { var barcode = _keyboardBuffer.ToString().Trim(); _keyboardBuffer.Clear(); if (barcode.Length > 0) HandleBarcode(barcode); e.Handled = true; return; }
-            if (!char.IsControl(e.KeyChar) && _keyboardBuffer.Length < _config.MaxBarcodeLength) _keyboardBuffer.Append(e.KeyChar);
+            if (!char.IsControl(e.KeyChar) && _keyboardBuffer.Length < _config.MaxBarcodeLength)
+            {
+                _keyboardBuffer.Append(e.KeyChar);
+                _keyboardFinalizeTimer.Stop(); _keyboardFinalizeTimer.Start();
+                e.Handled = true;
+            }
+        }
+
+        private bool CanCaptureKeyboardScan() =>
+            _scanner.IsKeyboardMode && ContainsFocus && Application.OpenForms.Count == 1;
+
+        private void CompleteKeyboardBarcode()
+        {
+            _keyboardFinalizeTimer.Stop();
+            var barcode = _keyboardBuffer.ToString().Trim();
+            _keyboardBuffer.Clear();
+            if (barcode.Length == 0) return;
+            Log.Info("扫码枪输入已接收，条码长度：{0}", barcode.Length);
+            AddLog($"已接收扫码输入（{barcode.Length} 字符），请选择工位");
+            HandleBarcode(barcode);
         }
         private void HandleBarcode(string barcode)
         {
