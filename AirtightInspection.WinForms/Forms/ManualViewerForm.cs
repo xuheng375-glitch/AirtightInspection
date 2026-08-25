@@ -26,7 +26,9 @@ namespace AirtightInspection.Forms
 
         public ManualViewerForm(string folder, string product)
         {
-            Text = "作业指导书 - " + product; Width = 1000; Height = 720; StartPosition = FormStartPosition.CenterParent; KeyPreview = true; FormBorderStyle = FormBorderStyle.None;
+            Text = "作业指导书 - " + product; Width = 1200; Height = 800; StartPosition = FormStartPosition.CenterScreen;
+            MinimumSize = new Size(1000, 700); WindowState = FormWindowState.Maximized;
+            KeyPreview = true; FormBorderStyle = FormBorderStyle.None;
             _images = ManualService.FindImages(folder, product);
             var toolbar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 50, Padding = new Padding(7), BackColor = IndustrialTheme.Panel };
             _previous = UiFactory.Button("上一张", (_, __) => { _index--; ShowImage(); });
