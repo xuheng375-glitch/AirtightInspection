@@ -291,8 +291,11 @@ namespace AirtightInspection.Forms
             button.FlatAppearance.BorderSize = 1;
             button.FlatAppearance.BorderColor = Color.FromArgb(64, 88, 101);
             button.FlatAppearance.MouseOverBackColor = Color.FromArgb(23, 77, 90);
-            button.Click += (_, __) => SelectStation(station);
-            button.DoubleClick += (_, __) => { SelectStation(station); ConfirmSelection(button, EventArgs.Empty); };
+            button.Click += (_, __) =>
+            {
+                SelectStation(station);
+                ConfirmSelection(button, EventArgs.Empty);
+            };
             return button;
         }
 
