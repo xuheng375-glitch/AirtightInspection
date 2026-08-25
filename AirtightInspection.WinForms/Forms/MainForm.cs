@@ -268,25 +268,43 @@ namespace AirtightInspection.Forms
         }
         private void HandleBarcode(string barcode)
         {
-            _focusHint.Text = $"● 已检测到扫码枪输入（{barcode.Length} 字符）";
-            _focusHint.ForeColor = IndustrialTheme.Success;
-            _focusHint.Refresh();
+            SetScanHint($"● 已检测到扫码枪输入（{barcode.Length} 字符）", IndustrialTheme.Success);
             if (_enabledStations.Count == 0) RefreshStations();
-            if (_enabledStations.Count == 0) { MessageBox.Show("没有启用中的工位，请先配置工位"); return; }
+            if (_enabledStations.Count == 0)
+            {
+                SetScanHint("● 扫码未入队：没有启用中的工位", IndustrialTheme.Danger);
+                MessageBox.Show("没有启用中的工位，请先配置工位"); return;
+            }
             var preparation = Stopwatch.StartNew();
             using (var dialog = new ScanStationForm(barcode, _enabledStations))
             {
                 preparation.Stop();
                 Log.Info("工位选择窗口准备耗时：{0} ms", preparation.ElapsedMilliseconds);
-                if (dialog.ShowDialog(this) != DialogResult.OK || dialog.SelectedStation == null) return;
+                if (dialog.ShowDialog(this) != DialogResult.OK || dialog.SelectedStation == null)
+                {
+                    SetScanHint("● 已取消工位选择，扫码未进入待检测队列", IndustrialTheme.Warning);
+                    return;
+                }
                 PendingRecord old; var station = dialog.SelectedStation;
-                if (_pending.TryGet(station.StationNo, out old) && MessageBox.Show($"该工位已有待检测条码 [{old.Barcode}]，是否用新条码 [{barcode}] 覆盖？", "覆盖确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                if (_pending.TryGet(station.StationNo, out old) && MessageBox.Show($"该工位已有待检测条码 [{old.Barcode}]，是否用新条码 [{barcode}] 覆盖？", "覆盖确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                {
+                    SetScanHint("● 已取消覆盖，扫码未进入待检测队列", IndustrialTheme.Warning);
+                    return;
+                }
                 var product = _products.SelectedItem as ProductConfig;
                 _pending.AddOrReplace(new PendingRecord { StationNo = station.StationNo, StationName = station.StationName,
                     Barcode = barcode, ProductName = product?.ProductName ?? string.Empty, ScanTime = DateTime.Now });
+                SetScanHint($"● 已进入待检测队列 · 工位 {station.StationNo:00}", IndustrialTheme.Success);
                 Log.Info("扫码 {0} 已分配到工位 {1}，产品 {2}", barcode, station.StationNo, product?.ProductName ?? string.Empty);
                 AddLog($"扫码 {barcode} 已分配到工位 {station.StationNo}");
             }
+        }
+
+        private void SetScanHint(string text, Color color)
+        {
+            _focusHint.Text = text;
+            _focusHint.ForeColor = color;
+            _focusHint.Refresh();
         }
         private void CheckTimeouts()
         {
