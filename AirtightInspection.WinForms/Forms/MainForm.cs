@@ -187,10 +187,10 @@ namespace AirtightInspection.Forms
         private static DataGridView CreatePendingGrid()
         {
             var grid = BaseGrid();
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位号", FillWeight = 50 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "Barcode", HeaderText = "条码" });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名" });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ScanTime", HeaderText = "扫码时间", DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss" } }); return grid;
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位号", FillWeight = 40, MinimumWidth = 60 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名", FillWeight = 70, MinimumWidth = 90 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "Barcode", HeaderText = "条码", FillWeight = 180, MinimumWidth = 200 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ScanTime", HeaderText = "扫码时间", FillWeight = 90, MinimumWidth = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss" } }); return grid;
         }
 
         private void OnShown(object sender, EventArgs e)
