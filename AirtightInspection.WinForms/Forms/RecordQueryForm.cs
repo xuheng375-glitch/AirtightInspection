@@ -54,7 +54,7 @@ namespace AirtightInspection.Forms
             toolbar.Controls.Add(heading);
             toolbar.Controls.Add(_queryButton);
             toolbar.Controls.Add(SunnyButton("重置条件", (_, __) => ResetFilters(true)));
-            toolbar.Controls.Add(SunnyButton("导出查询结果", ExportResults, 116));
+            toolbar.Controls.Add(SunnyButton("导出检测记录", ExportRecords, 116));
             toolbar.Controls.Add(SunnyButton("关闭", (_, __) => Close()));
             _countLabel = new UILabel { Text = "查询结果：0 条", AutoSize = true };
             _countLabel.ForeColor = IndustrialTheme.Muted;
@@ -237,30 +237,38 @@ namespace AirtightInspection.Forms
             if (query) Query(this, EventArgs.Empty);
         }
 
-        private async void ExportResults(object sender, EventArgs e)
+        private async void ExportRecords(object sender, EventArgs e)
         {
-            if (_results.Count == 0)
+            var trigger = sender as Control;
+            if (trigger != null) trigger.Enabled = false;
+            try
             {
-                IndustrialMessageBox.Show(this, "当前没有可导出的查询结果。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                using (var filter = new ExportFilterForm(_database.GetStations(), _database.GetProducts()))
+                {
+                    if (filter.ShowDialog(this) != DialogResult.OK) return;
+                    using (var dialog = new SaveFileDialog
+                    {
+                        Filter = "CSV 文件|*.csv",
+                        FileName = $"检测记录_{filter.StartDate:yyyyMMdd}_{filter.EndDate:yyyyMMdd}.csv"
+                    })
+                    {
+                        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                        Log.Info("开始流式导出检测记录：{0}", filter.FilterSummary);
+                        await CsvExportService.ExportAsync(dialog.FileName,
+                            _database.EnumerateRecords(filter.StartDate, filter.EndDateExclusive, filter.StationNo, filter.SelectedProductName));
+                        Log.Info("检测记录导出成功：{0}", dialog.FileName);
+                        IndustrialMessageBox.Show(this, "检测记录已成功导出。", "导出完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                }
             }
-            using (var dialog = new SaveFileDialog
+            catch (Exception ex)
             {
-                Filter = "CSV 文件|*.csv",
-                FileName = "查询结果_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv"
-            })
+                Log.Error(ex, "检测记录导出失败");
+                IndustrialMessageBox.Show(this, "导出失败：" + ex.Message, "导出失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
             {
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                try
-                {
-                    await CsvExportService.ExportAsync(dialog.FileName, _results);
-                    IndustrialMessageBox.Show(this, "查询结果已成功导出。", "导出完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "查询结果导出失败");
-                    IndustrialMessageBox.Show(this, "导出失败：" + ex.Message, "导出失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                if (trigger != null && !trigger.IsDisposed) trigger.Enabled = true;
             }
         }
 

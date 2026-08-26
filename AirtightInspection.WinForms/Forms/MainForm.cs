@@ -80,7 +80,6 @@ namespace AirtightInspection.Forms
             navigation.Controls.Add(NavigationButton("02  产品配置", OpenProducts));
             navigation.Controls.Add(NavigationButton("03  作业指导书", OpenManual));
             navigation.Controls.Add(NavigationButton("04  数据查询", OpenRecordQuery));
-            navigation.Controls.Add(NavigationButton("05  导出检测记录", ExportCsv));
             sidebar.Controls.Add(navigation, 0, 1);
 
             var sidebarFooter = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(14, 23, 30) };
@@ -414,35 +413,6 @@ namespace AirtightInspection.Forms
         private void OpenRecordQuery(object sender, EventArgs e)
         {
             using (var form = new RecordQueryForm(_database)) form.ShowDialog(this);
-        }
-        private async void ExportCsv(object sender, EventArgs e)
-        {
-            using (var filter = new ExportFilterForm(_database.GetStations(), _database.GetProducts()))
-            {
-                if (filter.ShowDialog(this) != DialogResult.OK) return;
-                using (var dialog = new SaveFileDialog
-                {
-                    Filter = "CSV 文件|*.csv",
-                    FileName = $"检测记录_{filter.StartDate:yyyyMMdd}_{filter.EndDate:yyyyMMdd}.csv"
-                })
-                {
-                    if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                    try
-                    {
-                        AddLog($"正在流式导出 CSV：{filter.FilterSummary}...");
-                        await CsvExportService.ExportAsync(dialog.FileName,
-                            _database.EnumerateRecords(filter.StartDate, filter.EndDateExclusive, filter.StationNo, filter.SelectedProductName));
-                        AddLog("CSV 导出成功：" + dialog.FileName);
-                        IndustrialMessageBox.Show(this, "检测记录已成功导出。", "导出完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, "CSV 导出失败");
-                        AddLog("CSV 导出失败：" + ex.Message);
-                        IndustrialMessageBox.Show(this, "导出失败：" + ex.Message, "导出失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                }
-            }
         }
         private void RefreshProducts(string selectName = null)
         {
