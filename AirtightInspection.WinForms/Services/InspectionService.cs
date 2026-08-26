@@ -30,14 +30,27 @@ namespace AirtightInspection.Services
             }
             try
             {
+                var parsed = AirtightResultParser.Parse(e.AirtightString);
                 _database.InsertRecord(new ScanRecord
                 {
                     StationNo = pending.StationNo, StationName = pending.StationName, Barcode = pending.Barcode,
                     ProductName = pending.ProductName, AirtightString = e.AirtightString, Status = 1,
-                    RecordTime = pending.ScanTime, DetectTime = DateTime.Now
+                    RecordTime = pending.ScanTime, DetectTime = DateTime.Now,
+                    ProgramNo = parsed.ProgramNo,
+                    LeakValue = parsed.LeakValue,
+                    LeakValueText = parsed.LeakValueText,
+                    LeakUnit = parsed.LeakUnit,
+                    PressureValue = parsed.PressureValue,
+                    PressureValueText = parsed.PressureValueText,
+                    PressureUnit = parsed.PressureUnit,
+                    ResultCode = parsed.ResultCode,
+                    ResultText = parsed.ResultText
                 });
                 _pending.TryRemove(e.StationNo, pending);
-                Raise($"工位 {e.StationNo} 条码 {pending.Barcode} 检测记录入库成功");
+                Raise($"工位 {e.StationNo} 条码 {pending.Barcode} 检测记录入库成功：" +
+                      (parsed.IsParsed
+                          ? $"程序 {parsed.ProgramNo}，泄漏值 {(parsed.LeakValue.HasValue ? parsed.LeakValueText + " " + parsed.LeakUnit : "--")}，{parsed.ResultText}"
+                          : "气密结果未能解析，已保留原始字符串"));
                 RecordsChanged?.Invoke(this, EventArgs.Empty);
                 TryAck(true);
             }

@@ -38,10 +38,12 @@ namespace AirtightInspection.Utilities
                 else { bytes.Add(high); bytes.Add(low); }
             }
             if (headerBytes > 0 && bytes.Count >= headerBytes) bytes.RemoveRange(0, headerBytes);
+            var terminatorIndex = bytes.FindIndex(value => value == 0 || value == '\r' || value == '\n' || value == 0x03);
+            if (terminatorIndex >= 0) bytes.RemoveRange(terminatorIndex, bytes.Count - terminatorIndex);
             Encoding encoding;
             try { encoding = Encoding.GetEncoding(encodingName); } catch { encoding = Encoding.ASCII; }
             var text = encoding.GetString(bytes.ToArray());
-            return new string(text.Where(c => c != '\x02' && c != '\x03' && c != '\r' && c != '\n' && c != '\0' && !char.IsControl(c)).ToArray()).Trim();
+            return new string(text.Where(c => c != '\x02' && (c == '\t' || !char.IsControl(c))).ToArray()).Trim();
         }
 
         private static ushort SwapIfNeeded(ushort value, string byteOrder) =>

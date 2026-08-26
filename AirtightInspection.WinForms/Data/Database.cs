@@ -55,7 +55,16 @@ CREATE TABLE IF NOT EXISTS ScanRecord (
  AirtightString TEXT,
  Status INTEGER,
  RecordTime TEXT,
- DetectTime TEXT
+ DetectTime TEXT,
+ ProgramNo TEXT,
+ LeakValue REAL,
+ LeakValueText TEXT,
+ LeakUnit TEXT,
+ PressureValue REAL,
+ PressureValueText TEXT,
+ PressureUnit TEXT,
+ ResultCode TEXT,
+ ResultText TEXT
 );
 CREATE TABLE IF NOT EXISTS ProductConfig (
  Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +75,15 @@ CREATE INDEX IF NOT EXISTS IX_ScanRecord_RecordTime ON ScanRecord(RecordTime DES
 CREATE INDEX IF NOT EXISTS IX_ScanRecord_DetectTime ON ScanRecord(DetectTime DESC);
 CREATE INDEX IF NOT EXISTS IX_ScanRecord_StationNo ON ScanRecord(StationNo);";
                 command.ExecuteNonQuery();
+                EnsureColumn(connection, "ProgramNo", "TEXT");
+                EnsureColumn(connection, "LeakValue", "REAL");
+                EnsureColumn(connection, "LeakValueText", "TEXT");
+                EnsureColumn(connection, "LeakUnit", "TEXT");
+                EnsureColumn(connection, "PressureValue", "REAL");
+                EnsureColumn(connection, "PressureValueText", "TEXT");
+                EnsureColumn(connection, "PressureUnit", "TEXT");
+                EnsureColumn(connection, "ResultCode", "TEXT");
+                EnsureColumn(connection, "ResultText", "TEXT");
             }
         }
 
@@ -134,12 +152,17 @@ CREATE INDEX IF NOT EXISTS IX_ScanRecord_StationNo ON ScanRecord(StationNo);";
 
         public void InsertRecord(ScanRecord record)
         {
-            Execute(@"INSERT INTO ScanRecord(StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime)
-VALUES(@no,@station,@barcode,@product,@airtight,@status,@recordTime,@detectTime)",
+            Execute(@"INSERT INTO ScanRecord(StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime,
+ProgramNo,LeakValue,LeakValueText,LeakUnit,PressureValue,PressureValueText,PressureUnit,ResultCode,ResultText)
+VALUES(@no,@station,@barcode,@product,@airtight,@status,@recordTime,@detectTime,
+@programNo,@leakValue,@leakValueText,@leakUnit,@pressureValue,@pressureValueText,@pressureUnit,@resultCode,@resultText)",
                 P("@no", record.StationNo), P("@station", record.StationName), P("@barcode", record.Barcode),
                 P("@product", record.ProductName), P("@airtight", record.AirtightString), P("@status", record.Status),
                 P("@recordTime", record.RecordTime.ToString(TimeFormat)),
-                P("@detectTime", record.DetectTime.HasValue ? (object)record.DetectTime.Value.ToString(TimeFormat) : DBNull.Value));
+                P("@detectTime", record.DetectTime.HasValue ? (object)record.DetectTime.Value.ToString(TimeFormat) : DBNull.Value),
+                P("@programNo", record.ProgramNo), P("@leakValue", record.LeakValue), P("@leakValueText", record.LeakValueText),
+                P("@leakUnit", record.LeakUnit), P("@pressureValue", record.PressureValue), P("@pressureValueText", record.PressureValueText),
+                P("@pressureUnit", record.PressureUnit), P("@resultCode", record.ResultCode), P("@resultText", record.ResultText));
         }
 
         public List<ScanRecord> GetRecords(int limit = 0)
@@ -148,17 +171,12 @@ VALUES(@no,@station,@barcode,@product,@airtight,@status,@recordTime,@detectTime)
             using (var connection = Open())
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime
+                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime,
+ProgramNo,LeakValue,LeakValueText,LeakUnit,PressureValue,PressureValueText,PressureUnit,ResultCode,ResultText
 FROM ScanRecord ORDER BY Id DESC" + (limit > 0 ? " LIMIT @limit" : string.Empty);
                 if (limit > 0) command.Parameters.Add(P("@limit", limit));
                 using (var reader = command.ExecuteReader())
-                    while (reader.Read()) result.Add(new ScanRecord
-                    {
-                        Id = reader.GetInt64(0), StationNo = reader.GetInt32(1), StationName = AsString(reader, 2),
-                        Barcode = AsString(reader, 3), ProductName = AsString(reader, 4), AirtightString = AsString(reader, 5),
-                        Status = reader.GetInt32(6), RecordTime = AsTime(reader, 7),
-                        DetectTime = reader.IsDBNull(8) ? (DateTime?)null : AsTime(reader, 8)
-                    });
+                    while (reader.Read()) result.Add(ReadRecord(reader));
             }
             return result;
         }
@@ -168,7 +186,8 @@ FROM ScanRecord ORDER BY Id DESC" + (limit > 0 ? " LIMIT @limit" : string.Empty)
             using (var connection = Open())
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime
+                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime,
+ProgramNo,LeakValue,LeakValueText,LeakUnit,PressureValue,PressureValueText,PressureUnit,ResultCode,ResultText
 FROM ScanRecord ORDER BY Id DESC";
                 using (var reader = command.ExecuteReader())
                     while (reader.Read())
@@ -242,7 +261,8 @@ FROM ScanRecord ORDER BY Id DESC";
                     var escaped = barcodeKeyword.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
                     command.Parameters.Add(P("@barcode", "%" + escaped + "%"));
                 }
-                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime
+                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime,
+ProgramNo,LeakValue,LeakValueText,LeakUnit,PressureValue,PressureValueText,PressureUnit,ResultCode,ResultText
 FROM ScanRecord WHERE " + string.Join(" AND ", conditions) + " ORDER BY Id DESC LIMIT @limit";
                 command.Parameters.Add(P("@limit", Math.Max(1, limit)));
                 using (var reader = command.ExecuteReader())
@@ -261,8 +281,39 @@ FROM ScanRecord WHERE " + string.Join(" AND ", conditions) + " ORDER BY Id DESC 
             AirtightString = AsString(reader, 5),
             Status = reader.GetInt32(6),
             RecordTime = AsTime(reader, 7),
-            DetectTime = reader.IsDBNull(8) ? (DateTime?)null : AsTime(reader, 8)
+            DetectTime = reader.IsDBNull(8) ? (DateTime?)null : AsTime(reader, 8),
+            ProgramNo = AsString(reader, 9),
+            LeakValue = AsNullableDouble(reader, 10),
+            LeakValueText = AsString(reader, 11),
+            LeakUnit = AsString(reader, 12),
+            PressureValue = AsNullableDouble(reader, 13),
+            PressureValueText = AsString(reader, 14),
+            PressureUnit = AsString(reader, 15),
+            ResultCode = AsString(reader, 16),
+            ResultText = AsString(reader, 17)
         };
+
+        private static void EnsureColumn(SqliteConnection connection, string columnName, string columnType)
+        {
+            var exists = false;
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "PRAGMA table_info(ScanRecord);";
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read())
+                        if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            exists = true;
+                            break;
+                        }
+            }
+            if (exists) return;
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "ALTER TABLE ScanRecord ADD COLUMN \"" + columnName + "\" " + columnType + ";";
+                command.ExecuteNonQuery();
+            }
+        }
 
         private void Execute(string sql, params SqliteParameter[] parameters)
         {
@@ -277,6 +328,8 @@ FROM ScanRecord WHERE " + string.Join(" AND ", conditions) + " ORDER BY Id DESC 
 
         private static SqliteParameter P(string name, object value) => new SqliteParameter(name, value ?? DBNull.Value);
         private static string AsString(IDataRecord reader, int index) => reader.IsDBNull(index) ? string.Empty : reader.GetString(index);
+        private static double? AsNullableDouble(IDataRecord reader, int index) =>
+            reader.IsDBNull(index) ? (double?)null : Convert.ToDouble(reader.GetValue(index), CultureInfo.InvariantCulture);
         private static DateTime AsTime(IDataRecord reader, int index)
         {
             DateTime time;

@@ -19,10 +19,11 @@ namespace AirtightInspection.Services
             {
                 using (var writer = new StreamWriter(temporaryPath, false, new UTF8Encoding(true)))
                 {
-                    writer.WriteLine("时间,工位号,工位名称,产品名称,条码,气密字符串,状态");
+                    writer.WriteLine("时间,工位号,工位名称,产品名称,条码,程序号,测试压力,泄漏值,仪器状态,气密原始字符串,入库状态");
                     foreach (var item in records)
                         writer.WriteLine(string.Join(",", Escape(item.DetectTime?.ToString("yyyy-MM-dd HH:mm:ss.fff") ?? ""),
                             item.StationNo.ToString(), Escape(item.StationName), Escape(item.ProductName), Escape(item.Barcode),
+                            Escape(item.ProgramDisplay), Escape(item.PressureDisplay), Escape(item.LeakDisplay), Escape(item.InstrumentStatusText),
                             Escape(item.AirtightString), Escape(item.StatusText)));
                 }
                 File.Move(temporaryPath, fullPath, true);

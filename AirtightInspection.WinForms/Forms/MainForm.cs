@@ -217,13 +217,33 @@ namespace AirtightInspection.Forms
         private static DataGridView CreateRecordsGrid()
         {
             var grid = BaseGrid();
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "DetectTime", HeaderText = "时间", FillWeight = 115, MinimumWidth = 170, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss.fff" } });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位号", FillWeight = 40, MinimumWidth = 60 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationName", HeaderText = "工位名称", FillWeight = 55, MinimumWidth = 80 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名称", FillWeight = 75, MinimumWidth = 100 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "Barcode", HeaderText = "条码", FillWeight = 150, MinimumWidth = 180 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "AirtightString", HeaderText = "气密字符串", FillWeight = 185, MinimumWidth = 230 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StatusText", HeaderText = "状态", FillWeight = 65, MinimumWidth = 110 }); return grid;
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "DetectTime", HeaderText = "时间", FillWeight = 105, MinimumWidth = 165, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss.fff" } });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位", FillWeight = 32, MinimumWidth = 55 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationName", HeaderText = "工位名称", FillWeight = 48, MinimumWidth = 75 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名称", FillWeight = 62, MinimumWidth = 90 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "Barcode", HeaderText = "条码", FillWeight = 125, MinimumWidth = 170 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProgramDisplay", HeaderText = "程序号", FillWeight = 42, MinimumWidth = 65 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "PressureDisplay", HeaderText = "测试压力", FillWeight = 68, MinimumWidth = 90 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "LeakDisplay", HeaderText = "泄漏值", FillWeight = 70, MinimumWidth = 90 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "InstrumentStatusText", HeaderText = "仪器状态", FillWeight = 90, MinimumWidth = 125 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StatusText", HeaderText = "入库状态", FillWeight = 64, MinimumWidth = 105 });
+            grid.CellFormatting += FormatInstrumentResult;
+            return grid;
+        }
+
+        private static void FormatInstrumentResult(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            var grid = (DataGridView)sender;
+            if (e.RowIndex < 0 || grid.Columns[e.ColumnIndex].DataPropertyName != "InstrumentStatusText") return;
+            var item = grid.Rows[e.RowIndex].DataBoundItem as ScanRecord;
+            if (item == null) return;
+            e.CellStyle.ForeColor = string.IsNullOrWhiteSpace(item.ResultCode)
+                ? IndustrialTheme.Muted
+                : string.Equals(item.ResultCode, "OK", StringComparison.OrdinalIgnoreCase)
+                    ? IndustrialTheme.Success
+                    : string.Equals(item.ResultCode, "AL", StringComparison.OrdinalIgnoreCase)
+                        ? IndustrialTheme.Warning
+                        : IndustrialTheme.Danger;
         }
         private static DataGridView CreatePendingGrid()
         {
@@ -433,7 +453,7 @@ namespace AirtightInspection.Forms
         private void ShowRecordDetail(int rowIndex)
         {
             if (rowIndex < 0) return; var item = _records.Rows[rowIndex].DataBoundItem as ScanRecord; if (item == null) return;
-            IndustrialMessageBox.Show(this, $"检测时间：{item.DetectTime:yyyy-MM-dd HH:mm:ss.fff}\n工位：{item.StationNo} - {item.StationName}\n产品：{item.ProductName}\n条码：{item.Barcode}\n气密字符串：{item.AirtightString}\n状态：{item.StatusText}", "检测记录详情", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            IndustrialMessageBox.Show(this, $"检测时间：{item.DetectTime:yyyy-MM-dd HH:mm:ss.fff}\n工位：{item.StationNo} - {item.StationName}\n产品：{item.ProductName}\n条码：{item.Barcode}\n程序号：{item.ProgramDisplay}\n测试压力：{item.PressureDisplay}\n泄漏值：{item.LeakDisplay}\n仪器状态：{item.InstrumentStatusText}\n气密原始字符串：{item.AirtightString}\n入库状态：{item.StatusText}", "检测记录详情", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         private void SetConnection(bool connected)
         {
