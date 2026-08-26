@@ -217,7 +217,7 @@ namespace AirtightInspection.Forms
         private static DataGridView CreateRecordsGrid()
         {
             var grid = BaseGrid();
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "DetectTime", HeaderText = "时间", FillWeight = 105, MinimumWidth = 165, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss.fff" } });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "DetectTime", HeaderText = "时间", FillWeight = 78, MinimumWidth = 135, DefaultCellStyle = new DataGridViewCellStyle { Format = "yy-MM-dd HH:mm:ss" } });
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位", FillWeight = 32, MinimumWidth = 55 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationName", HeaderText = "工位名称", FillWeight = 48, MinimumWidth = 75 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名称", FillWeight = 62, MinimumWidth = 90 });
@@ -241,6 +241,8 @@ namespace AirtightInspection.Forms
                 ? IndustrialTheme.Muted
                 : string.Equals(item.ResultCode, "OK", StringComparison.OrdinalIgnoreCase)
                     ? IndustrialTheme.Success
+                    : string.Equals(item.ResultCode, "NG", StringComparison.OrdinalIgnoreCase)
+                        ? IndustrialTheme.Danger
                     : string.Equals(item.ResultCode, "AL", StringComparison.OrdinalIgnoreCase)
                         ? IndustrialTheme.Warning
                         : IndustrialTheme.Danger;
@@ -251,7 +253,7 @@ namespace AirtightInspection.Forms
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位号", FillWeight = 40, MinimumWidth = 60 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名", FillWeight = 70, MinimumWidth = 90 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "Barcode", HeaderText = "条码", FillWeight = 180, MinimumWidth = 200 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ScanTime", HeaderText = "扫码时间", FillWeight = 90, MinimumWidth = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss" } }); return grid;
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ScanTime", HeaderText = "扫码时间", FillWeight = 76, MinimumWidth = 120, DefaultCellStyle = new DataGridViewCellStyle { Format = "yy-MM-dd HH:mm:ss" } }); return grid;
         }
 
         private void OnShown(object sender, EventArgs e)

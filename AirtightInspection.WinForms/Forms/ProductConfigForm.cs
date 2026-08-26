@@ -46,8 +46,8 @@ namespace AirtightInspection.Forms
             _grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名称", FillWeight = 70 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                DataPropertyName = "CreateTime", HeaderText = "创建时间", FillWeight = 30,
-                DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss" }
+                DataPropertyName = "CreateTime", HeaderText = "创建时间", FillWeight = 24, MinimumWidth = 120,
+                DefaultCellStyle = new DataGridViewCellStyle { Format = "yy-MM-dd HH:mm:ss" }
             });
 
             Controls.Add(_grid); Controls.Add(toolbar); IndustrialTheme.Apply(this); heading.ForeColor = IndustrialTheme.Accent;

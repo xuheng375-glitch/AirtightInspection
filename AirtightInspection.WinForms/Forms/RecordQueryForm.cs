@@ -134,7 +134,7 @@ namespace AirtightInspection.Forms
                 MultiSelect = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
-            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "DetectTime", HeaderText = "检测时间", FillWeight = 105, MinimumWidth = 175, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm:ss.fff" } });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "DetectTime", HeaderText = "检测时间", FillWeight = 78, MinimumWidth = 135, DefaultCellStyle = new DataGridViewCellStyle { Format = "yy-MM-dd HH:mm:ss" } });
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationNo", HeaderText = "工位", FillWeight = 32, MinimumWidth = 60 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "StationName", HeaderText = "工位名称", FillWeight = 45, MinimumWidth = 80 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = "ProductName", HeaderText = "产品名称", FillWeight = 60, MinimumWidth = 100 });
@@ -159,6 +159,8 @@ namespace AirtightInspection.Forms
                 ? IndustrialTheme.Muted
                 : string.Equals(item.ResultCode, "OK", StringComparison.OrdinalIgnoreCase)
                     ? IndustrialTheme.Success
+                    : string.Equals(item.ResultCode, "NG", StringComparison.OrdinalIgnoreCase)
+                        ? IndustrialTheme.Danger
                     : string.Equals(item.ResultCode, "AL", StringComparison.OrdinalIgnoreCase)
                         ? IndustrialTheme.Warning
                         : IndustrialTheme.Danger;

@@ -59,7 +59,17 @@ namespace AirtightInspection.Models
               (string.IsNullOrWhiteSpace(PressureUnit) ? string.Empty : " " + PressureUnit)
             : "--";
         public string ProgramDisplay => string.IsNullOrWhiteSpace(ProgramNo) ? "--" : ProgramNo;
-        public string InstrumentStatusText => string.IsNullOrWhiteSpace(ResultText) ? "历史数据未解析" : ResultText;
+        public string InstrumentStatusText
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(ResultText)) return "历史数据未解析";
+                if (string.IsNullOrWhiteSpace(ResultCode)) return ResultText;
+                if (string.Equals(ResultCode, "OK", StringComparison.OrdinalIgnoreCase)) return "OK / 合格";
+                if (string.Equals(ResultCode, "NG", StringComparison.OrdinalIgnoreCase)) return "NG / 不合格";
+                return ResultCode + " / " + ResultText;
+            }
+        }
         public string StatusText => Status == 1 ? "上位机已入库" : "入库异常";
     }
 
