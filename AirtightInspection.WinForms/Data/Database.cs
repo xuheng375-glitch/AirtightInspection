@@ -195,6 +195,38 @@ FROM ScanRecord ORDER BY Id DESC";
             }
         }
 
+        public IEnumerable<ScanRecord> EnumerateRecords(DateTime startTime, DateTime endTimeExclusive,
+            int? stationNo, string productName)
+        {
+            using (var connection = Open())
+            using (var command = connection.CreateCommand())
+            {
+                var conditions = new List<string>
+                {
+                    "DetectTime>=@startTime",
+                    "DetectTime<@endTime"
+                };
+                command.Parameters.Add(P("@startTime", startTime.ToString(TimeFormat)));
+                command.Parameters.Add(P("@endTime", endTimeExclusive.ToString(TimeFormat)));
+                if (stationNo.HasValue)
+                {
+                    conditions.Add("StationNo=@stationNo");
+                    command.Parameters.Add(P("@stationNo", stationNo.Value));
+                }
+                if (!string.IsNullOrWhiteSpace(productName))
+                {
+                    conditions.Add("ProductName=@productName");
+                    command.Parameters.Add(P("@productName", productName.Trim()));
+                }
+                command.CommandText = @"SELECT Id,StationNo,StationName,Barcode,ProductName,AirtightString,Status,RecordTime,DetectTime,
+ProgramNo,LeakValue,LeakValueText,LeakUnit,PressureValue,PressureValueText,PressureUnit,ResultCode,ResultText
+FROM ScanRecord WHERE " + string.Join(" AND ", conditions) + " ORDER BY Id DESC";
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read())
+                        yield return ReadRecord(reader);
+            }
+        }
+
         public string CheckIntegrity()
         {
             using (var connection = Open())
