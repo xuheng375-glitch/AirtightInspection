@@ -155,7 +155,7 @@ namespace AirtightInspection.Forms
             if (e.RowIndex < 0 || grid.Columns[e.ColumnIndex].DataPropertyName != "InstrumentStatusText") return;
             var item = grid.Rows[e.RowIndex].DataBoundItem as ScanRecord;
             if (item == null) return;
-            e.CellStyle.ForeColor = string.IsNullOrWhiteSpace(item.ResultCode)
+            var statusColor = string.IsNullOrWhiteSpace(item.ResultCode)
                 ? IndustrialTheme.Muted
                 : string.Equals(item.ResultCode, "OK", StringComparison.OrdinalIgnoreCase)
                     ? IndustrialTheme.Success
@@ -164,6 +164,8 @@ namespace AirtightInspection.Forms
                     : string.Equals(item.ResultCode, "AL", StringComparison.OrdinalIgnoreCase)
                         ? IndustrialTheme.Warning
                         : IndustrialTheme.Danger;
+            e.CellStyle.ForeColor = statusColor;
+            e.CellStyle.SelectionForeColor = statusColor;
         }
 
         private static UIButton SunnyButton(string text, EventHandler click, int width = 88)
