@@ -1,5 +1,5 @@
 #define MyAppName "气密检测数据采集系统"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "本地采集节点"
 #define MyAppExeName "AirtightInspection.exe"
 

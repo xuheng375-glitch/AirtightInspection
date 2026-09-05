@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,11 +21,13 @@ namespace AirtightInspection.Services
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly AppConfig _config;
         private readonly object _sync = new object();
+        private readonly object _connectionSync = new object();
         private CancellationTokenSource _cts;
         private TcpClient _client;
         private IModbusMaster _master;
         private readonly ModbusFactory _factory = new ModbusFactory();
         private bool _connected;
+        private bool _bindingFlagsInitialized;
 
         public event EventHandler<bool> ConnectionChanged;
         public event EventHandler<int> StationChanged;
@@ -50,8 +53,19 @@ namespace AirtightInspection.Services
         public void WriteAck(bool success)
         {
             if (!_config.EnableWriteAck) return;
-            var words = EncodingHelper.EncodeInt32(success ? _config.AckValue : _config.AckValueFail,
-                _config.WordOrder, _config.ByteOrder);
+            WriteInt32WithRetry(_config.AckAddr, success ? _config.AckValue : _config.AckValueFail, "PLC 应答");
+        }
+
+        public void WriteStationBinding(int stationNo, bool bound)
+        {
+            var address = _config.GetStationBindingFlagAddress(stationNo);
+            WriteInt32WithRetry(address, bound ? 1 : 0, $"工位 {stationNo} 条码绑定状态 D{address}");
+            RaiseMessage($"工位 {stationNo} 条码绑定状态已写入 D{address}={Convert.ToInt32(bound)}");
+        }
+
+        private void WriteInt32WithRetry(ushort address, int value, string operation)
+        {
+            var words = EncodingHelper.EncodeInt32(value, _config.WordOrder, _config.ByteOrder);
             Exception lastError = null;
             for (var attempt = 1; attempt <= 3; attempt++)
             {
@@ -61,20 +75,23 @@ namespace AirtightInspection.Services
                     lock (_sync)
                     {
                         if (_master == null) throw new InvalidOperationException("PLC 未连接");
-                        _master.WriteMultipleRegisters(_config.SlaveId, _config.AckAddr, words);
+                        _master.WriteMultipleRegisters(_config.SlaveId, address, words);
+                        var actual = EncodingHelper.DecodeInt32(
+                            _master.ReadHoldingRegisters(_config.SlaveId, address, 2), _config.WordOrder, _config.ByteOrder);
+                        if (actual != value) throw new IOException($"写入后回读值为 {actual}，期望值为 {value}");
                     }
-                    if (attempt > 1) RaiseMessage($"PLC 应答第 {attempt} 次写入成功");
+                    if (attempt > 1) RaiseMessage($"{operation}第 {attempt} 次写入成功");
                     return;
                 }
                 catch (Exception ex)
                 {
                     lastError = ex;
-                    Log.Warn(ex, "PLC 应答第 {0} 次写入失败", attempt);
+                    Log.Warn(ex, "{0}第 {1} 次写入失败", operation, attempt);
                     Disconnect();
                     if (attempt < 3) Thread.Sleep(200);
                 }
             }
-            throw new InvalidOperationException("PLC 应答连续 3 次写入失败", lastError);
+            throw new InvalidOperationException(operation + "连续 3 次写入或回读验证失败", lastError);
         }
 
         private async Task PollLoop(CancellationToken token)
@@ -130,16 +147,40 @@ namespace AirtightInspection.Services
 
         private void EnsureConnected()
         {
-            if (_master != null && _client != null && _client.Connected) return;
-            Disconnect();
-            var client = new TcpClient { ReceiveTimeout = _config.TimeoutMs, SendTimeout = _config.TimeoutMs };
-            var task = client.ConnectAsync(_config.PlcIp, _config.PlcPort);
-            if (!task.Wait(_config.TimeoutMs)) { client.Close(); throw new TimeoutException("PLC 连接超时"); }
-            lock (_sync) { _client = client; _master = _factory.CreateMaster(client); }
-            SetConnected(true); RaiseMessage("PLC 已连接");
+            lock (_connectionSync)
+            {
+                if (_master != null && _client != null && _client.Connected) return;
+                DisconnectCore();
+                var client = new TcpClient { ReceiveTimeout = _config.TimeoutMs, SendTimeout = _config.TimeoutMs };
+                try
+                {
+                    var task = client.ConnectAsync(_config.PlcIp, _config.PlcPort);
+                    if (!task.Wait(_config.TimeoutMs)) throw new TimeoutException("PLC 连接超时");
+                    lock (_sync)
+                    {
+                        _client = client;
+                        _master = _factory.CreateMaster(client);
+                    }
+                    client = null;
+                    if (!_bindingFlagsInitialized) InitializeBindingFlags();
+                }
+                catch
+                {
+                    client?.Close();
+                    DisconnectCore();
+                    throw;
+                }
+                SetConnected(true);
+                RaiseMessage("PLC 已连接");
+            }
         }
 
         private void Disconnect()
+        {
+            lock (_connectionSync) DisconnectCore();
+        }
+
+        private void DisconnectCore()
         {
             lock (_sync)
             {
@@ -148,6 +189,30 @@ namespace AirtightInspection.Services
                 _master = null; _client = null;
             }
             SetConnected(false);
+        }
+
+        private void InitializeBindingFlags()
+        {
+            var addresses = new[]
+            {
+                _config.Station1BindingFlagAddr,
+                _config.Station2BindingFlagAddr,
+                _config.Station3BindingFlagAddr
+            };
+            var zero = EncodingHelper.EncodeInt32(0, _config.WordOrder, _config.ByteOrder);
+            lock (_sync)
+            {
+                if (_master == null) throw new InvalidOperationException("PLC 未连接");
+                foreach (var address in addresses)
+                {
+                    _master.WriteMultipleRegisters(_config.SlaveId, address, zero);
+                    var actual = EncodingHelper.DecodeInt32(
+                        _master.ReadHoldingRegisters(_config.SlaveId, address, 2), _config.WordOrder, _config.ByteOrder);
+                    if (actual != 0) throw new IOException($"启动清零 D{address} 后回读值为 {actual}");
+                }
+            }
+            _bindingFlagsInitialized = true;
+            RaiseMessage($"PLC 条码绑定点位启动清零完成：D{addresses[0]}=0，D{addresses[1]}=0，D{addresses[2]}=0");
         }
 
         private void SetConnected(bool value)

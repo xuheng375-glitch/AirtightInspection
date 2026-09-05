@@ -7,9 +7,9 @@
     <Nullable>disable</Nullable>
     <AssemblyName>AirtightInspection</AssemblyName>
     <RootNamespace>AirtightInspection</RootNamespace>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
     <Product>气密检测数据采集系统</Product>
     <Company>本地采集节点</Company>
     <ApplicationManifest>app.manifest</ApplicationManifest>

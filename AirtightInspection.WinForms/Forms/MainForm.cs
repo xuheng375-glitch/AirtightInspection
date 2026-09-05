@@ -85,7 +85,7 @@ namespace AirtightInspection.Forms
             var sidebarFooter = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(14, 23, 30) };
             _clockStatus = new Label { Text = "--:--:--", Dock = DockStyle.Top, Height = 34, ForeColor = IndustrialTheme.Text, Font = new Font("Consolas", 16F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
             _dateStatus = new Label { Text = DateTime.Now.ToString("yyyy-MM-dd"), Dock = DockStyle.Top, Height = 24, ForeColor = IndustrialTheme.Muted, Font = new Font("Consolas", 9F), TextAlign = ContentAlignment.MiddleLeft };
-            var versionLabel = new Label { Text = "本地采集节点  ·  版本 1.0", Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.FromArgb(80, 109, 122), Font = new Font("Microsoft YaHei UI", 8F) };
+            var versionLabel = new Label { Text = "本地采集节点  ·  版本 " + Application.ProductVersion, Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.FromArgb(80, 109, 122), Font = new Font("Microsoft YaHei UI", 8F) };
             sidebarFooter.Controls.Add(versionLabel); sidebarFooter.Controls.Add(_dateStatus); sidebarFooter.Controls.Add(_clockStatus); sidebar.Controls.Add(sidebarFooter, 0, 2);
 
             // 顶部设备状态卡
@@ -374,8 +374,35 @@ namespace AirtightInspection.Forms
                     SetScanHint("● 已取消覆盖，扫码未进入待检测队列", IndustrialTheme.Warning);
                     return;
                 }
-                _pending.AddOrReplace(new PendingRecord { StationNo = station.StationNo, StationName = station.StationName,
-                    Barcode = barcode, ProductName = product.ProductName, ScanTime = DateTime.Now });
+                var pending = new PendingRecord
+                {
+                    StationNo = station.StationNo,
+                    StationName = station.StationName,
+                    Barcode = barcode,
+                    ProductName = product.ProductName,
+                    ScanTime = DateTime.Now
+                };
+                _pending.AddOrReplace(pending);
+                try
+                {
+                    _modbus.WriteStationBinding(station.StationNo, true);
+                }
+                catch (Exception ex)
+                {
+                    if (old != null) _pending.AddOrReplace(old);
+                    else _pending.TryRemove(station.StationNo, pending);
+                    var address = _config.GetStationBindingFlagAddress(station.StationNo);
+                    Log.Error(ex, "工位 {0} PLC 条码绑定状态写入失败", station.StationNo);
+                    SetScanHint($"● 绑定失败 · PLC D{address} 未确认写入 1", IndustrialTheme.Danger);
+                    AddLog($"工位 {station.StationNo} 条码绑定失败，已取消本次绑定：{ex.Message}");
+                    var recoveryMessage = old == null
+                        ? TryClearFailedBinding(station.StationNo, address)
+                        : "原待检条码已恢复，请确认该点位仍为 1。";
+                    IndustrialMessageBox.Show(this,
+                        $"工位 {station.StationNo} 的 PLC 绑定点位 D{address} 写入 1 失败。\n\n本次条码绑定已取消。{recoveryMessage}\n请检查 PLC 通信后重新扫码。",
+                        "PLC 条码绑定失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
                 SetScanHint($"● 已进入待检测队列 · 工位 {station.StationNo:00}", IndustrialTheme.Success);
                 Log.Info("扫码 {0} 已分配到工位 {1}，产品 {2}", barcode, station.StationNo, product.ProductName);
                 AddLog($"扫码 {barcode} 已分配到工位 {station.StationNo}");
@@ -387,6 +414,21 @@ namespace AirtightInspection.Forms
             _focusHint.Text = text;
             _focusHint.ForeColor = color;
             _focusHint.Refresh();
+        }
+        private string TryClearFailedBinding(int stationNo, ushort address)
+        {
+            try
+            {
+                _modbus.WriteStationBinding(stationNo, false);
+                AddLog($"工位 {stationNo} 失败绑定的 PLC 点位 D{address} 已确认清零");
+                return $"PLC 点位 D{address} 已确认恢复为 0。";
+            }
+            catch (Exception clearException)
+            {
+                Log.Error(clearException, "工位 {0} 失败绑定回滚清零失败", stationNo);
+                AddLog($"严重：工位 {stationNo} 绑定失败且 D{address} 无法确认清零，请人工检查");
+                return $"PLC 点位 D{address} 无法确认清零，请立即人工检查该点位。";
+            }
         }
         private void CheckTimeouts()
         {
@@ -455,6 +497,18 @@ namespace AirtightInspection.Forms
             var card = _plcStatus.Parent as IndustrialCard; if (card != null) { card.AccentColor = _plcStatus.ForeColor; card.Invalidate(); }
         }
         private void AddLog(string text) => SafeUi(() => { _logList.Items.Insert(0, DateTime.Now.ToString("HH:mm:ss") + "  " + text); while (_logList.Items.Count > 300) _logList.Items.RemoveAt(_logList.Items.Count - 1); });
-        private void SafeUi(Action action) { if (IsDisposed || !IsHandleCreated) return; if (InvokeRequired) BeginInvoke(action); else action(); }
+        private void SafeUi(Action action)
+        {
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try
+            {
+                if (InvokeRequired) BeginInvoke(action);
+                else action();
+            }
+            catch (InvalidOperationException) when (IsDisposed || Disposing || !IsHandleCreated)
+            {
+                // Background device events can race with window shutdown.
+            }
+        }
     }
 }

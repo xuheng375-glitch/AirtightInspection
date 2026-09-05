@@ -29,6 +29,9 @@ namespace AirtightInspection.Config
         public ushort AckAddr => (ushort)_ini.GetInt("Register", "AckAddr", 4000);
         public int AckValue => _ini.GetInt("Register", "AckValue", 2);
         public int AckValueFail => _ini.GetInt("Register", "AckValueFail", 3);
+        public ushort Station1BindingFlagAddr => (ushort)_ini.GetInt("Register", "Station1BindingFlagAddr", 3000);
+        public ushort Station2BindingFlagAddr => (ushort)_ini.GetInt("Register", "Station2BindingFlagAddr", 3002);
+        public ushort Station3BindingFlagAddr => (ushort)_ini.GetInt("Register", "Station3BindingFlagAddr", 3004);
         public string WordOrder => _ini.Get("Register", "WordOrder", "LowHigh");
         public string ByteOrder => _ini.Get("Register", "ByteOrder", "BigEndian");
         public int CharsPerRegister => _ini.GetInt("Register", "CharsPerRegister", 2);
@@ -55,6 +58,14 @@ namespace AirtightInspection.Config
         public int KeyboardCharTimeoutMs => Math.Max(20, _ini.GetInt("Scanner", "KeyboardCharTimeoutMs", 100));
         public string Password => _ini.Get("Security", "Password", "123456");
         public string ManualFolder => Resolve(_ini.Get("Manual", "Folder", "ProductManual"));
+
+        public ushort GetStationBindingFlagAddress(int stationNo) => stationNo switch
+        {
+            1 => Station1BindingFlagAddr,
+            2 => Station2BindingFlagAddr,
+            3 => Station3BindingFlagAddr,
+            _ => throw new ArgumentOutOfRangeException(nameof(stationNo), stationNo, "仅支持工位 1、2、3 的 PLC 条码绑定点位")
+        };
 
         private string Resolve(string path) => Path.IsPathRooted(path) ? path : Path.Combine(BaseDirectory, path);
     }
